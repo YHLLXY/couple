@@ -11,11 +11,11 @@ const store = useWishStore();
     <p class="placeholder-desc">告诉 TA 你今天想要什么，让宠爱触手可及</p>
     <div class="placeholder-stats">
       <div class="stat-item">
-        <span class="stat-value">{{ store.pendingWishes.length }}</span>
+        <span class="stat-value">{{ store.pendingCount }}</span>
         <span class="stat-label">待完成</span>
       </div>
       <div class="stat-item">
-        <span class="stat-value">{{ store.doneWishes.length }}</span>
+        <span class="stat-value">{{ store.doneCount }}</span>
         <span class="stat-label">已完成</span>
       </div>
     </div>
