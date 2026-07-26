@@ -1,0 +1,76 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  color: var(--color-text-primary);
+  background-color: var(--color-bg);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  overflow-x: hidden;
+  background-color: var(--color-bg);
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img, video {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+button, input, textarea, select {
+  font: inherit;
+  color: inherit;
+  border: none;
+  outline: none;
+  background: none;
+}
+
+button {
+  cursor: pointer;
+}
+
+ul, ol {
+  list-style: none;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-weight: var(--font-weight-bold);
+  line-height: var(--line-height-tight);
+}
+
+/* Vant 组件全局覆盖 */
+:root {
+  --van-primary-color: var(--color-primary);
+  --van-danger-color: var(--color-danger);
+  --van-success-color: var(--color-success);
+  --van-warning-color: var(--color-warning);
+  --van-text-color: var(--color-text-primary);
+  --van-text-color-secondary: var(--color-text-secondary);
+  --van-background: var(--color-bg);
+  --van-background-2: var(--color-surface);
+  --van-border-color: var(--color-border);
+  --van-radius-md: var(--radius-md);
+  --van-radius-lg: var(--radius-lg);
+}
