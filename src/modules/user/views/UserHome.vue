@@ -1,7 +1,22 @@
 <script setup lang="ts">
+import { computed } from 'vue';
 import { useUserStore } from '../store';
+import { useThemeStore } from '@/modules/theme/store';
+import { THEME_LIST } from '@/modules/theme/types';
 
 const userStore = useUserStore();
+const themeStore = useThemeStore();
+
+function cycleTheme() {
+  const themes = THEME_LIST.map(t => t.name);
+  const idx = themes.indexOf(themeStore.currentTheme);
+  const next = themes[(idx + 1) % themes.length];
+  themeStore.setTheme(next);
+}
+
+const currentThemeLabel = computed(() => {
+  return THEME_LIST.find(t => t.name === themeStore.currentTheme)?.label || '';
+});
 </script>
 
 <template>
@@ -30,6 +45,7 @@ const userStore = useUserStore();
 
     <!-- Menu -->
     <div class="menu-list">
+      <van-cell title="🎨 主题" :value="currentThemeLabel" is-link @click="cycleTheme" />
       <van-cell title="🎨 主题切换" is-link to="/settings" />
       <van-cell title="📋 关于小甜豆" is-link />
     </div>

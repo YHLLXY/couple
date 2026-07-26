@@ -20,7 +20,7 @@ const notifyRoute: RouteRecordRaw = {
 const settingsRoute: RouteRecordRaw = {
   path: '/settings',
   name: 'settings',
-  component: () => import('@/modules/user/views/UserHome.vue'), // placeholder for now
+  component: () => import('@/modules/theme/views/Settings.vue'),
   meta: { title: '设置', showBack: true },
 };
 
