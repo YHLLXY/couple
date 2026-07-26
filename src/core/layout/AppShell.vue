@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
+import { useNotifyStore } from '@/modules/notify/store';
+import IdentitySwitcher from '@/modules/user/components/IdentitySwitcher.vue';
 import TabBar from './TabBar.vue';
 
 const route = useRoute();
@@ -12,6 +14,9 @@ const title = computed(() => {
 const showBack = computed(() => {
   return route.meta?.showBack === true;
 });
+
+const router = useRouter();
+const notifyStore = useNotifyStore();
 
 function onBack() {
   window.history.back();
@@ -30,9 +35,15 @@ function onBack() {
       @click-left="onBack"
     >
       <template #left v-if="!showBack">
-        <div class="app-logo">
-          <span class="logo-icon">🫘</span>
-          <span class="logo-text">小甜豆</span>
+        <IdentitySwitcher />
+      </template>
+
+      <template #right>
+        <div class="notify-bell" @click="router.push('/notify')">
+          <van-icon name="bell-o" size="20" />
+          <span v-if="notifyStore.unreadCount > 0" class="notify-bell__badge">
+            {{ notifyStore.unreadCount > 99 ? '99+' : notifyStore.unreadCount }}
+          </span>
         </div>
       </template>
     </van-nav-bar>
@@ -64,21 +75,26 @@ function onBack() {
   -webkit-overflow-scrolling: touch;
 }
 
-.app-logo {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
+.notify-bell {
+  position: relative;
+  cursor: pointer;
+  padding: 4px;
 }
 
-.logo-icon {
-  font-size: 20px;
-}
-
-.logo-text {
-  font-size: var(--font-size-md);
+.notify-bell__badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  min-width: 16px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+  background: var(--color-danger);
+  color: #fff;
+  font-size: 10px;
   font-weight: var(--font-weight-bold);
-  color: var(--color-primary);
-  font-family: var(--font-family-round);
+  border-radius: var(--radius-full);
+  padding: 0 4px;
 }
 
 /* Page transition */

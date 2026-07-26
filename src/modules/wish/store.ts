@@ -155,6 +155,35 @@ export const useWishStore = defineStore('wish', () => {
       if (extra?.proofNote) wish.proofNote = extra.proofNote;
     }
     persist();
+
+    // 触发通知（动态导入避免循环依赖）
+    import('@/modules/notify/store').then(({ useNotifyStore }) => {
+      const notify = useNotifyStore();
+      const fromUser = wish!.fromUserId === 'user_a' ? '小兔子' : '小熊';
+
+      if (status === 'accepted') {
+        notify.addNotification(
+          'wish_accepted',
+          `${fromUser}接单了你的心愿`,
+          `「${wish!.content}」— ${fromUser}说交给我吧！`,
+          wish!.id,
+        );
+      } else if (status === 'done') {
+        notify.addNotification(
+          'wish_done',
+          '心愿已完成！',
+          `「${wish!.content}」— 已完成${wish!.proofNote ? '：' + wish!.proofNote : ''}`,
+          wish!.id,
+        );
+      } else if (status === 'postponed') {
+        notify.addNotification(
+          'wish_accepted',
+          `${fromUser}把心愿推迟了`,
+          `「${wish!.content}」— 改天再做`,
+          wish!.id,
+        );
+      }
+    });
   }
 
   function removeWish(id: string) {

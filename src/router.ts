@@ -8,6 +8,14 @@ const rootRoute: RouteRecordRaw = {
   redirect: '/interact',
 };
 
+// Notification center page
+const notifyRoute: RouteRecordRaw = {
+  path: '/notify',
+  name: 'notifyCenter',
+  component: () => import('@/modules/notify/views/NotifyCenter.vue'),
+  meta: { title: '通知', showBack: true },
+};
+
 // Settings page (global, not tied to a specific module)
 const settingsRoute: RouteRecordRaw = {
   path: '/settings',
@@ -25,7 +33,7 @@ const notFoundRoute: RouteRecordRaw = {
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes: [rootRoute, ...getAllRoutes(), settingsRoute, notFoundRoute],
+  routes: [rootRoute, ...getAllRoutes(), notifyRoute, settingsRoute, notFoundRoute],
 });
 
 export default router;
