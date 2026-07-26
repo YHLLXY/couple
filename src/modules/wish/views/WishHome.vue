@@ -1,78 +1,177 @@
 <script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { useWishStore } from '../store';
+import { useUserStore } from '@/modules/user/store';
+import WishCard from '../components/WishCard.vue';
+import WishActionSheet from '../components/WishActionSheet.vue';
+import EmptyState from '@/components/EmptyState.vue';
+import type { Wish, WishStatus } from '../types';
 
-const store = useWishStore();
+const router = useRouter();
+const wishStore = useWishStore();
+const userStore = useUserStore();
+
+// Sync identity
+wishStore.setCurrentUserId(userStore.currentUserId);
+
+const filterTabs = [
+  { key: 'all' as const, label: '全部' },
+  { key: 'pending' as const, label: '待响应' },
+  { key: 'active' as const, label: '进行中' },
+  { key: 'done' as const, label: '已完成' },
+];
+
+function setFilter(key: 'all' | 'pending' | 'active' | 'done') {
+  wishStore.statusFilter = key;
+}
+
+// Action sheet
+const selectedWish = ref<Wish | null>(null);
+const showActionSheet = ref(false);
+
+function onCardClick(wish: Wish) {
+  selectedWish.value = wish;
+  showActionSheet.value = true;
+}
+
+function onActionClose() {
+  showActionSheet.value = false;
+  selectedWish.value = null;
+}
+
+function onAction(status: WishStatus, extra?: { proofNote?: string }) {
+  if (!selectedWish.value) return;
+  wishStore.updateWishStatus(selectedWish.value.id, status, extra);
+  showActionSheet.value = false;
+  selectedWish.value = null;
+}
+
+function isMine(wish: Wish) {
+  return wish.fromUserId === userStore.currentUserId;
+}
+
+// Pull refresh
+const refreshing = ref(false);
+function onRefresh() {
+  refreshing.value = true;
+  setTimeout(() => { refreshing.value = false; }, 600);
+}
+
+// Identity change listener
+function onIdentityChanged(e: Event) {
+  const detail = (e as CustomEvent).detail;
+  if (detail?.userId) {
+    wishStore.setCurrentUserId(detail.userId);
+  }
+}
+
+onMounted(() => window.addEventListener('identity-changed', onIdentityChanged));
+onUnmounted(() => window.removeEventListener('identity-changed', onIdentityChanged));
 </script>
 
 <template>
-  <div class="page-placeholder">
-    <div class="placeholder-icon">💝</div>
-    <h2 class="placeholder-title">心愿墙</h2>
-    <p class="placeholder-desc">告诉 TA 你今天想要什么，让宠爱触手可及</p>
-    <div class="placeholder-stats">
-      <div class="stat-item">
-        <span class="stat-value">{{ store.pendingCount }}</span>
-        <span class="stat-label">待完成</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-value">{{ store.doneCount }}</span>
-        <span class="stat-label">已完成</span>
-      </div>
+  <div class="wish-wall">
+    <!-- Filter tabs -->
+    <div class="filter-tabs">
+      <span
+        v-for="tab in filterTabs"
+        :key="tab.key"
+        class="filter-tab"
+        :class="{ 'filter-tab--active': wishStore.statusFilter === tab.key }"
+        @click="setFilter(tab.key)"
+      >
+        {{ tab.label }}
+        <sup v-if="tab.key === 'pending' && wishStore.pendingCount" class="filter-count">{{ wishStore.pendingCount }}</sup>
+        <sup v-else-if="tab.key === 'active' && wishStore.activeCount" class="filter-count">{{ wishStore.activeCount }}</sup>
+        <sup v-else-if="tab.key === 'done' && wishStore.doneCount" class="filter-count">{{ wishStore.doneCount }}</sup>
+      </span>
     </div>
-    <van-button type="primary" round size="small">发个心愿 ✨</van-button>
+
+    <!-- Card grid -->
+    <van-pull-refresh v-model="refreshing" @refresh="onRefresh">
+      <div v-if="wishStore.filteredWishes.length > 0" class="card-grid">
+        <WishCard
+          v-for="wish in wishStore.filteredWishes"
+          :key="wish.id"
+          :wish="wish"
+          :is-mine="isMine(wish)"
+          @click="onCardClick"
+        />
+      </div>
+
+      <div v-else class="empty-wrap">
+        <EmptyState
+          icon="💝"
+          title="还没有心愿"
+          description="点击右下角按钮，告诉TA你想要什么"
+        />
+      </div>
+    </van-pull-refresh>
+
+    <!-- FAB -->
+    <van-floating-bubble icon="plus" @click="router.push('/wish/create')" />
+
+    <!-- Action sheet -->
+    <WishActionSheet
+      :wish="selectedWish"
+      :visible="showActionSheet"
+      :is-mine="isMine(selectedWish!)"
+      @close="onActionClose"
+      @action="onAction"
+    />
   </div>
 </template>
 
 <style scoped>
-.page-placeholder {
+.wish-wall {
+  min-height: 100%;
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 24px);
+}
+
+.filter-tabs {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 60vh;
-  padding: var(--space-xl);
-  text-align: center;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-base);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  background: var(--color-bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
-.placeholder-icon {
-  font-size: 64px;
-  margin-bottom: var(--space-base);
-}
+.filter-tabs::-webkit-scrollbar { display: none; }
 
-.placeholder-title {
-  font-size: var(--font-size-xl);
-  color: var(--color-text-primary);
-  margin-bottom: var(--space-sm);
-}
-
-.placeholder-desc {
+.filter-tab {
+  flex-shrink: 0;
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-lg);
-  max-width: 240px;
+  background: var(--color-surface);
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
 }
 
-.placeholder-stats {
-  display: flex;
-  gap: var(--space-xl);
-  margin-bottom: var(--space-lg);
-}
-
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-.stat-value {
-  font-size: var(--font-size-lg);
+.filter-tab--active {
+  background: var(--color-primary);
+  color: #fff;
   font-weight: var(--font-weight-bold);
-  color: var(--color-primary);
 }
 
-.stat-label {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-hint);
+.filter-count {
+  color: inherit;
+  margin-left: 2px;
+}
+
+.card-grid {
+  columns: 2;
+  column-gap: 10px;
+  padding: 0 var(--space-base);
+}
+
+.empty-wrap {
+  padding-top: 80px;
 }
 </style>
