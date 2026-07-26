@@ -53,10 +53,15 @@ src/
 ├── modules/                     # 功能模块（插件化架构）
 │   ├── interact/                # 互动模块（Tab 1，默认首页）
 │   ├── wish/                    # 心愿墙模块（Tab 2，核心功能）
+│   │   ├── components/          # WishCard、WishActionSheet
+│   │   └── views/               # WishHome（卡片墙）+ WishCreate（发心愿）
 │   ├── calendar/                # 甜蜜日历模块（Tab 3）
 │   ├── user/                    # 用户模块（Tab 4 + 绑定页）
+│   │   ├── components/          # IdentitySwitcher（身份切换）
+│   │   └── views/               # UserHome（个人中心）
 │   ├── theme/                   # 主题模块（无路由，全局主题切换）
 │   └── notify/                  # 通知模块（无路由，消息管理）
+│       └── views/               # NotifyCenter（通知列表）
 ├── components/                  # 全局通用组件
 │   ├── HeartButton.vue          # 比心按钮（带动效）
 │   └── EmptyState.vue           # 空状态占位组件
@@ -110,7 +115,7 @@ TabBar 和路由由注册中心**自动生成**，无需手动维护。
 | 阶段 | 内容 | 状态 |
 |------|------|:--:|
 | 阶段 1 | 骨架搭建 — 项目初始化、注册中心、TabBar、主题、占位页面 | ✅ 完成 |
-| 阶段 2 | 核心 MVP — 登录绑定、心愿发布/响应、通知 | 📋 待开始 |
+| 阶段 2 | 核心 MVP — Mock 身份切换、心愿卡片墙、发心愿、接单/完成、通知中心 | ✅ 完成 |
 | 阶段 3 | 互动增强 — 贴纸、点赞、日历视图 | 📋 待开始 |
 | 阶段 4 | 扩展 — 积分系统、共同日记、后端接入 | 📋 待开始 |
 | 阶段 5 | 打磨 — 真机适配、PWA、性能优化 | 📋 待开始 |
@@ -118,6 +123,20 @@ TabBar 和路由由注册中心**自动生成**，无需手动维护。
 ---
 
 ## 更新日志
+
+### 2026-07-27 — 阶段 2 完成
+
+- `feat(wish)`: 心愿 Store 重写 — 5 条 Mock 种子数据、localStorage 持久化、完整 CRUD
+- `feat(user)`: 用户 Store 增强 — 2 个 Mock 身份（小兔子🐰/小熊🐻）、身份切换器
+- `feat(notify)`: 通知 Store 增强 — 浏览器推送、30 天自动清理、心愿状态变更自动生成通知
+- `feat(wish)`: 心愿卡片墙 — 双列瀑布流、状态筛选标签、下拉刷新
+- `feat(wish)`: WishCard 组件 — 分类标签/状态徽章/优先级/已完成盖章效果
+- `feat(wish)`: WishActionSheet — 接单/延期/小惊喜四种响应操作
+- `feat(wish)`: 发心愿表单 — 50 字限制 + 6 个分类 + 3 档优先级 + 8 个快捷模板
+- `feat(user)`: IdentitySwitcher — 底部弹出身份切换面板，切换后全局刷新
+- `feat(notify)`: NotifyCenter — 通知列表、全部已读、点击跳转对应心愿
+- `feat`: AppShell — NavBar 集成身份切换器 + 通知铃铛（含未读红点）
+- `feat`: Router 新增 `/wish/create`、`/notify` 路由
 
 ### 2026-07-26 — 阶段 1 完成
 
