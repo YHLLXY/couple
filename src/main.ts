@@ -15,6 +15,7 @@ import './modules/interact';
 import './modules/wish';
 import './modules/calendar';
 import './modules/user';
+import './modules/points';
 
 const app = createApp(App);
 
