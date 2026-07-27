@@ -58,7 +58,7 @@ function handleProfileClick() {
       <span class="partner-label">你的另一半</span>
       <div class="partner-info">
         <span class="partner-avatar">{{ userStore.partner.avatar }}</span>
-        <span class="partner-name">{{ userStore.partner.nickname }}</span>
+        <span class="partner-name">{{ userStore.partner.name }}</span>
       </div>
     </div>
     <div v-else class="partner-card partner-card--empty">

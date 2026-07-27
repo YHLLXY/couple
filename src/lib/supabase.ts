@@ -22,3 +22,27 @@ export const supabase = createClient<Database>(
     },
   }
 );
+
+/** 检查网络是否可用 */
+export function isOnline(): boolean {
+  return navigator.onLine;
+}
+
+/** 离线降级：包装 Supabase 调用，离线时静默返回 fallback */
+export async function safeQuery<T>(
+  queryFn: () => Promise<{ data: T | null; error: Error | null }>,
+  fallback: T | null = null,
+): Promise<T | null> {
+  if (!isOnline()) {
+    console.warn('[Supabase] Offline — skipping query, returning fallback.');
+    return fallback;
+  }
+  try {
+    const { data, error } = await queryFn();
+    if (error) throw error;
+    return data;
+  } catch (err) {
+    console.warn('[Supabase] Query failed:', (err as Error).message);
+    return fallback;
+  }
+}
