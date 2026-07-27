@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import { useUserStore } from '../store';
 import { useThemeStore } from '@/modules/theme/store';
 import { THEME_LIST } from '@/modules/theme/types';
 import PointsBadge from '@/modules/points/components/PointsBadge.vue';
 
+const router = useRouter();
 const userStore = useUserStore();
 const themeStore = useThemeStore();
 
@@ -18,16 +20,34 @@ function cycleTheme() {
 const currentThemeLabel = computed(() => {
   return THEME_LIST.find(t => t.name === themeStore.currentTheme)?.label || '';
 });
+
+onMounted(async () => {
+  if (!userStore.isLoggedIn) {
+    await userStore.initAuth();
+  }
+});
+
+function handleProfileClick() {
+  if (userStore.isLoggedIn) {
+    router.push('/bind-couple');
+  } else {
+    router.push('/login');
+  }
+}
 </script>
 
 <template>
   <div class="user-page">
     <!-- Profile card -->
-    <div class="profile-card">
-      <div class="profile-avatar">{{ userStore.currentUser.avatar }}</div>
-      <h2 class="profile-name">{{ userStore.currentUser.nickname }}</h2>
-      <p v-if="userStore.coupleCode" class="profile-code">
-        情侣码：<strong>{{ userStore.coupleCode }}</strong>
+    <div class="profile-card" @click="handleProfileClick">
+      <div v-if="userStore.isLoggedIn" class="profile-avatar">{{ userStore.currentUser?.avatar }}</div>
+      <div v-else class="profile-avatar">🫘</div>
+      <h2 class="profile-name">{{ userStore.isLoggedIn ? userStore.currentUser?.name : '点击登录' }}</h2>
+      <p v-if="userStore.isBound && userStore.inviteCode" class="profile-code">
+        情侣码：<strong>{{ userStore.inviteCode }}</strong>
+      </p>
+      <p v-else-if="userStore.isLoggedIn && !userStore.isBound" class="profile-code profile-code--hint">
+        点击绑定另一半 💕
       </p>
     </div>
 
@@ -43,7 +63,7 @@ const currentThemeLabel = computed(() => {
     </div>
     <div v-else class="partner-card partner-card--empty">
       <p>还没有绑定另一半</p>
-      <van-button type="primary" round size="small">绑定另一半 💕</van-button>
+      <van-button type="primary" round size="small" to="/bind-couple">绑定另一半 💕</van-button>
     </div>
 
     <!-- Menu -->
@@ -113,5 +133,9 @@ const currentThemeLabel = computed(() => {
 .menu-list {
   border-radius: var(--radius-md);
   overflow: hidden;
+}
+
+.profile-code--hint {
+  color: var(--color-primary);
 }
 </style>
