@@ -16,6 +16,35 @@ const notifyRoute: RouteRecordRaw = {
   meta: { title: '通知', showBack: true },
 };
 
+// Auth routes（登录 + 回调 + 注册 + 绑定）
+const loginRoute: RouteRecordRaw = {
+  path: '/login',
+  name: 'login',
+  component: () => import('@/views/Login.vue'),
+  meta: { title: '登录', hideTabBar: true },
+};
+
+const authCallbackRoute: RouteRecordRaw = {
+  path: '/auth-callback',
+  name: 'authCallback',
+  component: () => import('@/views/AuthCallback.vue'),
+  meta: { title: '登录中', hideTabBar: true },
+};
+
+const registerRoute: RouteRecordRaw = {
+  path: '/register',
+  name: 'register',
+  component: () => import('@/views/Register.vue'),
+  meta: { title: '设置身份', hideTabBar: true },
+};
+
+const bindCoupleRoute: RouteRecordRaw = {
+  path: '/bind-couple',
+  name: 'bindCouple',
+  component: () => import('@/views/BindCouple.vue'),
+  meta: { title: '情侣绑定', showBack: true, hideTabBar: true },
+};
+
 // Settings page (global, not tied to a specific module)
 const settingsRoute: RouteRecordRaw = {
   path: '/settings',
@@ -33,7 +62,17 @@ const notFoundRoute: RouteRecordRaw = {
 
 const router = createRouter({
   history: createWebHashHistory(),
-  routes: [rootRoute, ...getAllRoutes(), notifyRoute, settingsRoute, notFoundRoute],
+  routes: [
+    rootRoute,
+    ...getAllRoutes(),
+    notifyRoute,
+    loginRoute,
+    authCallbackRoute,
+    registerRoute,
+    bindCoupleRoute,
+    settingsRoute,
+    notFoundRoute,
+  ],
 });
 
 export default router;
