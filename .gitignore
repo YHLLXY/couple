@@ -3,6 +3,8 @@ dist/
 .vscode/
 *.log
 .DS_Store
-.vercel
+.vercel/*
+!.vercel/project.json
+!.vercel/README.txt
 .env
 .env.local
