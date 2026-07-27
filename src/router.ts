@@ -56,8 +56,7 @@ const settingsRoute: RouteRecordRaw = {
 // Catch-all 404
 const notFoundRoute: RouteRecordRaw = {
   path: '/:pathMatch(.*)*',
-  name: 'notFound',
-  redirect: '/interact',
+  redirect: '/',
 };
 
 const router = createRouter({
