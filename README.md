@@ -126,11 +126,17 @@ TabBar 和路由由注册中心**自动生成**，无需手动维护。
 | 阶段 4a | 扩展 — 积分系统（赚积分+兑奖励+等级体系） | ✅ 完成 |
 | 阶段 4b | 扩展 — 共同日记 | ✅ 完成 |
 | 阶段 4c | 扩展 — 后端接入 | 📋 待开始 |
-| 阶段 5 | 打磨 — 真机适配、PWA、性能优化 | 📋 待开始 |
+| 阶段 5 | 打磨 — PWA 可安装+离线缓存、移动端兼容修复 | ✅ 完成 |
 
 ---
 
 ## 更新日志
+
+### 2026-07-27 — 阶段 5 完成
+
+- `feat(pwa)`: PWA 配置 — vite-plugin-pwa + Workbox 预缓存（49 文件/390KB）+ 可安装到桌面
+- `feat(pwa)`: PWA 图标（192+512 PNG）+ apple-touch-icon + manifest
+- `fix`: iOS textarea 防缩放（font-size 16px）+ 全局 overscroll-behavior
 
 ### 2026-07-27 — 阶段 4b 完成
 
