@@ -4,6 +4,50 @@
 
 ---
 
+## 2026-07-27 — 阶段 4c 后端接入（Supabase）
+
+### 1. Store 接口不变，只换持久化层
+
+迁移 localStorage → Supabase 的核心原则：**组件层完全不动，Pinia Store 暴露的方法和计算属性签名不变，只改内部实现**。`storage.get()` → `supabase.from().select()`、`storage.set()` → `supabase.from().insert/update/delete()`，机械替换即可。一旦模式建立，8 个 Store 的改造大同小异。
+
+### 2. Supabase Realtime 需要手动 ALTER PUBLICATION
+
+建表后 Realtime 页面不会自动显示新表，必须在 SQL Editor 中执行 `ALTER PUBLICATION supabase_realtime ADD TABLE wishes;` 才能开启实时订阅。这是一个非常不明显的步骤，Supabase 文档也没强调。
+
+### 3. RLS 先关后开
+
+Row Level Security 默认行为取决于创建表时的 Supabase 版本。如果启用 RLS 但没有配置策略，所有查询静默返回空数据（不报错），调了半天才发现是权限问题。**开发阶段全部 DISABLE，功能跑通后再统一配策略。**
+
+### 4. Magic Link 回调需要处理 Hash 路由
+
+小甜豆用 `createWebHashHistory`（`/#/xxx`），Supabase 的 `emailRedirectTo` 必须写成 `window.location.origin + '/#/auth-callback'`。同时 Supabase client 必须配置 `detectSessionInUrl: true`，否则 SDK 不会解析 URL hash 中的 token。
+
+### 5. Supabase client 必须比 app 先初始化
+
+`src/main.ts` 中 `import './lib/supabase'` 必须放在最前面，早于 `createApp()`。否则 Store 在初始化时调用 supabase 会拿到未初始化的实例。**这是依赖顺序问题，不能用懒加载规避。**
+
+### 6. Type 变更的级联修复按依赖顺序来
+
+改了 `User` 接口（`nickname` → `name`、删除 `partnerId` 等）后，所有引用的文件都报 TS 错误。修复顺序：types → store → views → components。跳级修复会导致反复报错。
+
+### 7. 并行 Subagent 可能互相覆盖
+
+同时派 4 个 agent 迁移 4 个 Store 时，有的 agent 顺手修复了不在自己任务范围内的文件，导致后来者发现"工作已被完成"。**多 agent 并行改造相邻文件时，需要明确划分文件边界，或干脆串行。**
+
+### 8. Supabase URL 取 Project URL 而非 REST URL
+
+Settings → API 页面有两个 URL：Project URL（`https://xxxxx.supabase.co`）和 REST API URL（`https://xxxxx.supabase.co/rest/v1/`）。`createClient()` 要的是 Project URL，不要带 `/rest/v1/` 后缀。
+
+### 9. Vite 环境变量必须有 VITE_ 前缀
+
+`import.meta.env.VITE_SUPABASE_URL` 能读到，但 `import.meta.env.SUPABASE_URL`（无前缀）是 `undefined`。Vite 只把 `VITE_` 开头的变量暴露给客户端。
+
+### 10. timestamptz ↔ number 的双向映射
+
+JS 用 `Date.now()`（毫秒数），PostgreSQL 用 `timestamptz`。Store 中需要 `mapRowToXxx()` 函数做双向转换：`new Date(row.created_at).getTime()`（DB→JS）和 `new Date().toISOString()`（JS→DB）。不能混用。
+
+---
+
 ## 2026-07-27 — 阶段 5 打磨
 
 ### 1. vite-plugin-pwa 比手写 Service Worker 省心得多

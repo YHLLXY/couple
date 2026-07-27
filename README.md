@@ -127,12 +127,22 @@ TabBar 和路由由注册中心**自动生成**，无需手动维护。
 | 阶段 3 | 互动增强 — 签到+贴纸墙、甜蜜日历、主题设置页 | ✅ 完成 |
 | 阶段 4a | 扩展 — 积分系统（赚积分+兑奖励+等级体系） | ✅ 完成 |
 | 阶段 4b | 扩展 — 共同日记 | ✅ 完成 |
-| 阶段 4c | 扩展 — 后端接入 | 📋 待开始 |
+| 阶段 4c | 扩展 — 后端接入（Supabase） | ✅ 完成 |
 | 阶段 5 | 打磨 — PWA 可安装+离线缓存、移动端兼容修复 | ✅ 完成 |
 
 ---
 
 ## 更新日志
+
+### 2026-07-27 — 阶段 4c 完成
+
+- `feat(supabase)`: Supabase 后端接入 — 8 个 Pinia Store 全部从 localStorage 迁移到 PostgreSQL
+- `feat(auth)`: Magic Link 邮箱登录 + 情侣绑定（6 位邀请码）+ 注册身份选择
+- `feat(auth)`: 新增页面 — Login、AuthCallback、Register、BindCouple
+- `feat(realtime)`: 心愿 Realtime 实时订阅（Supabase WebSocket），对方发心愿即时推送
+- `feat(offline)`: 离线降级兜底 — `safeQuery()` 包装，网络断开时静默返回空数据不崩溃
+- `refactor(stores)`: wish/diary/points/interact/notify/calendar 全部改为 Supabase CRUD
+- `refactor(user)`: user store 从 Mock 身份切换重写为真实 Supabase Auth
 
 ### 2026-07-27 — 阶段 5 完成
 
