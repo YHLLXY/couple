@@ -62,6 +62,11 @@ export const useInteractStore = defineStore('interact', () => {
       checkInDates.value.push(d);
       storage.set(STORAGE_KEY_CHECKIN, checkInDates.value);
       addActivity('checkin', '今天也想你 💕');
+      // 加积分
+      import('@/modules/points/store').then(({ usePointsStore }) => {
+        const uid = storage.get<string>('currentUserId', 'user_a') ?? 'user_a';
+        usePointsStore().earnPoints(uid, 'checkin');
+      });
     }
   }
 
@@ -92,6 +97,11 @@ export const useInteractStore = defineStore('interact', () => {
         'TA给你发了贴纸',
         `${sticker.emoji} TA发了一个「${sticker.label}」贴纸`,
       );
+    });
+    // 加积分
+    import('@/modules/points/store').then(({ usePointsStore }) => {
+      const uid = storage.get<string>('currentUserId', 'user_a') ?? 'user_a';
+      usePointsStore().earnPoints(uid, 'sticker_sent');
     });
   }
 

@@ -184,6 +184,12 @@ export const useWishStore = defineStore('wish', () => {
         );
       }
     });
+
+    // 加积分（完成心愿的接收方/执行方获得积分）
+    import('@/modules/points/store').then(({ usePointsStore }) => {
+      const doerId = wish!.toUserId;
+      usePointsStore().earnPoints(doerId, 'wish_done');
+    });
   }
 
   function removeWish(id: string) {

@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import { useUserStore } from '../store';
 import { useThemeStore } from '@/modules/theme/store';
 import { THEME_LIST } from '@/modules/theme/types';
+import PointsBadge from '@/modules/points/components/PointsBadge.vue';
 
 const userStore = useUserStore();
 const themeStore = useThemeStore();
@@ -30,6 +31,8 @@ const currentThemeLabel = computed(() => {
       </p>
     </div>
 
+    <PointsBadge />
+
     <!-- Partner info -->
     <div v-if="userStore.partner" class="partner-card">
       <span class="partner-label">你的另一半</span>
@@ -47,6 +50,7 @@ const currentThemeLabel = computed(() => {
     <div class="menu-list">
       <van-cell title="🎨 主题" :value="currentThemeLabel" is-link @click="cycleTheme" />
       <van-cell title="🎨 主题切换" is-link to="/settings" />
+      <van-cell title="🪙 积分中心" is-link to="/points" />
       <van-cell title="📋 关于小甜豆" is-link />
     </div>
   </div>
