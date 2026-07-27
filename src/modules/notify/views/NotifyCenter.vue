@@ -8,6 +8,7 @@ const notifyStore = useNotifyStore();
 const router = useRouter();
 
 onMounted(() => {
+  notifyStore.loadNotifications();
   notifyStore.requestPushPermission();
 });
 
