@@ -4,6 +4,26 @@
 
 ---
 
+## 2026-07-27 — 阶段 5 打磨
+
+### 1. vite-plugin-pwa 比手写 Service Worker 省心得多
+
+Workbox 的 `precacheAndRoute` 自动扫描构建产物生成缓存清单，49 个文件无需手动维护。`registerType: 'autoUpdate'` 自动处理版本更新。**PWA 需求优先用 vite-plugin-pwa，不要手写 sw.js。**
+
+### 2. iOS Safari 的 textarea 字体 < 16px 会触发页面缩放
+
+即使全局设了 `-webkit-text-size-adjust: 100%`，iOS Safari 仍会在 input/textarea 字体 < 16px 时自动放大。解决方案就是硬设 `font-size: 16px`，不依赖 CSS 变量。
+
+### 3. sharp 生成 PWA 图标很方便
+
+从 SVG 一键转 192+512 PNG，用完就卸。比手动找在线工具快，也不需要在项目里持久保留这个依赖。
+
+### 4. overscroll-behavior: none 防止 iOS 橡皮筋
+
+iOS Safari 的弹性滚动（rubberband）会和 Vant 的下拉刷新组件（pull-refresh）冲突，造成双重视觉反馈。全局设 `overscroll-behavior: none` 即可消除。
+
+---
+
 ## 2026-07-27 — 阶段 4b 共同日记
 
 ### 1. 移动端日期选择：原生 input[type=date] 比 Vant DatePicker 更简单
