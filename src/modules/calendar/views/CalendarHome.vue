@@ -11,7 +11,7 @@ const monthLabel = computed(() => `${store.selectedMonth.year}年 ${store.select
 // Day detail popup
 const showDayDetail = ref(false);
 const detailDay = ref<number | null>(null);
-const dayMarks = ref({ hasWish: false, hasCheckIn: false, hasAnniversary: false });
+const dayMarks = ref({ hasWish: false, hasCheckIn: false, hasAnniversary: false, hasDiary: false });
 
 function onDayClick(day: number) {
   detailDay.value = day;
@@ -78,6 +78,7 @@ function isToday(day: number): boolean {
               <span v-if="store.getDayMarks(store.getDateStr(day)).hasCheckIn" class="dot dot--green" />
               <span v-if="store.getDayMarks(store.getDateStr(day)).hasWish" class="dot dot--pink" />
               <span v-if="store.getDayMarks(store.getDateStr(day)).hasAnniversary" class="dot dot--yellow" />
+              <span v-if="store.getDayMarks(store.getDateStr(day)).hasDiary" class="dot dot--purple" />
             </span>
           </template>
         </div>
@@ -88,6 +89,7 @@ function isToday(day: number): boolean {
         <span class="legend-item"><span class="dot dot--green" /> 已签到</span>
         <span class="legend-item"><span class="dot dot--pink" /> 有心愿</span>
         <span class="legend-item"><span class="dot dot--yellow" /> 纪念日</span>
+        <span class="legend-item"><span class="dot dot--purple" /> 有日记</span>
       </div>
     </div>
 
@@ -99,7 +101,10 @@ function isToday(day: number): boolean {
           <p v-if="dayMarks.hasCheckIn">✅ 已签到</p>
           <p v-if="dayMarks.hasWish">💝 当天有心愿记录</p>
           <p v-if="dayMarks.hasAnniversary">🎂 纪念日</p>
-          <p v-if="!dayMarks.hasCheckIn && !dayMarks.hasWish && !dayMarks.hasAnniversary" class="no-data">
+          <p v-if="dayMarks.hasDiary">
+            📔 <a :href="'#/diary?date=' + store.selectedDate" style="color: var(--color-primary);">查看日记</a>
+          </p>
+          <p v-if="!dayMarks.hasCheckIn && !dayMarks.hasWish && !dayMarks.hasAnniversary && !dayMarks.hasDiary" class="no-data">
             这一天还没有记录
           </p>
         </div>
@@ -234,6 +239,7 @@ function isToday(day: number): boolean {
 .dot--green { background: var(--color-accent); }
 .dot--pink { background: var(--color-primary); }
 .dot--yellow { background: var(--color-warning); }
+.dot--purple { background: #9c27b0; }
 
 .legend {
   display: flex;

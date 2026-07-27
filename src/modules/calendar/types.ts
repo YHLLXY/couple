@@ -3,6 +3,7 @@ export interface CalendarDay {
   hasWishes: boolean;
   bothCheckedIn: boolean;
   hasAnniversary: boolean;
+  hasDiary: boolean;
 }
 
 export interface Anniversary {

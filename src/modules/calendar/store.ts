@@ -38,8 +38,38 @@ export const useCalendarStore = defineStore('calendar', () => {
       .sort((a, b) => a.daysLeft - b.daysLeft);
   });
 
+  // === 日记缓存 ===
+  function getDiaryDateSet(): Set<string> {
+    try {
+      const raw = storage.get<{ createdAt: number; isPrivate: boolean; authorId: string }[]>('diary_entries', []) ?? [];
+      const currentUserId = storage.get<string>('currentUserId', 'user_a') ?? 'user_a';
+      const dates = new Set<string>();
+      for (const e of raw) {
+        if (!e.isPrivate || e.authorId === currentUserId) {
+          const dateStr = new Date(e.createdAt).toISOString().slice(0, 10);
+          dates.add(dateStr);
+        }
+      }
+      return dates;
+    } catch {
+      return new Set<string>();
+    }
+  }
+
+  // 缓存日记日期集合（避免每次 getDayMarks 都遍历全部条目）
+  let diaryDateCache: Set<string> | null = null;
+
+  function refreshDiaryCache() {
+    diaryDateCache = getDiaryDateSet();
+  }
+
+  function isDiaryDate(dateStr: string): boolean {
+    if (diaryDateCache === null) refreshDiaryCache();
+    return diaryDateCache!.has(dateStr);
+  }
+
   // 获取某天的标记
-  function getDayMarks(dateStr: string): { hasWish: boolean; hasCheckIn: boolean; hasAnniversary: boolean } {
+  function getDayMarks(dateStr: string): { hasWish: boolean; hasCheckIn: boolean; hasAnniversary: boolean; hasDiary: boolean } {
     let hasWish = false;
     let hasCheckIn = false;
 
@@ -64,7 +94,8 @@ export const useCalendarStore = defineStore('calendar', () => {
         : a.date === dateStr;
     });
 
-    return { hasWish, hasCheckIn, hasAnniversary };
+    const hasDiary = isDiaryDate(dateStr);
+    return { hasWish, hasCheckIn, hasAnniversary, hasDiary };
   }
 
   // 生成月历数据
@@ -119,5 +150,6 @@ export const useCalendarStore = defineStore('calendar', () => {
     getDayMarks, getMonthGrid, getDateStr,
     prevMonth, nextMonth,
     addAnniversary, removeAnniversary,
+    refreshDiaryCache,
   };
 });
