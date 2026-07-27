@@ -62,6 +62,9 @@ src/
 │   ├── points/                  # 积分模块（无 TabBar）
 │   │   ├── components/          # PointsBadge、RewardCard
 │   │   └── views/               # PointsHome（积分主页）+ RewardShop（奖励商店）
+│   ├── diary/                    # 共同日记模块（无 TabBar）
+│   │   ├── components/          # DiaryCard
+│   │   └── views/               # DiaryHome（时间线）+ DiaryWrite（编辑器）
 │   ├── theme/                   # 主题模块（无路由，全局主题切换）
 │   └── notify/                  # 通知模块（无路由，消息管理）
 │       └── views/               # NotifyCenter（通知列表）
@@ -121,13 +124,21 @@ TabBar 和路由由注册中心**自动生成**，无需手动维护。
 | 阶段 2 | 核心 MVP — Mock 身份切换、心愿卡片墙、发心愿、接单/完成、通知中心 | ✅ 完成 |
 | 阶段 3 | 互动增强 — 签到+贴纸墙、甜蜜日历、主题设置页 | ✅ 完成 |
 | 阶段 4a | 扩展 — 积分系统（赚积分+兑奖励+等级体系） | ✅ 完成 |
-| 阶段 4b | 扩展 — 共同日记 | 📋 待开始 |
+| 阶段 4b | 扩展 — 共同日记 | ✅ 完成 |
 | 阶段 4c | 扩展 — 后端接入 | 📋 待开始 |
 | 阶段 5 | 打磨 — 真机适配、PWA、性能优化 | 📋 待开始 |
 
 ---
 
 ## 更新日志
+
+### 2026-07-27 — 阶段 4b 完成
+
+- `feat(diary)`: 共同日记模块 — 共享日记 + 私密标记、文字+Emoji、时间线列表
+- `feat(diary)`: DiaryHome 时间线视图、DiaryWrite 编辑器（Emoji 面板 + 日期选择）
+- `feat(diary)`: DiaryCard 组件 — 作者头像/昵称/私密标记/内容预览
+- `feat(calendar)`: 日历联动 — 日记日期标记（紫色圆点）、日详情弹窗日记链接
+- `feat(user)`: UserHome 菜单新增「📔 共同日记」入口
 
 ### 2026-07-27 — 阶段 4a 完成
 
