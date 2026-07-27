@@ -197,7 +197,7 @@ function dateLabel(): string {
   padding: 12px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  font-size: var(--font-size-base);
+  font-size: 16px; /* 防止 iOS 自动缩放 */
   line-height: 1.6;
   color: var(--color-text-primary);
   background: var(--color-surface);

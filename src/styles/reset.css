@@ -26,6 +26,7 @@ body {
   max-width: var(--page-max-width);
   margin: 0 auto;
   overflow-x: hidden;
+  overscroll-behavior: none;
   background-color: var(--color-bg);
 }
 
