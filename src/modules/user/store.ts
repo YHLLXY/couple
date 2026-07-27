@@ -25,10 +25,12 @@ export const useUserStore = defineStore('user', () => {
   /** 发送 Magic Link 登录邮件 */
   async function sendMagicLink(email: string): Promise<{ success: boolean; error?: string }> {
     loading.value = true;
+    // 始终重定向到线上地址（不能依赖 window.location.origin，本地调试时是 localhost）
+    const siteUrl = import.meta.env.VITE_SITE_URL || 'https://couple-chi-two.vercel.app';
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: window.location.origin + '/#/auth-callback',
+        emailRedirectTo: siteUrl + '/#/auth-callback',
       },
     });
     loading.value = false;
