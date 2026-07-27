@@ -1,90 +1,103 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Wish, WishStatus, WishCategory, WishPriority } from './types';
-import { storage } from '@/core/storage';
-
-const STORAGE_KEY = 'wishes';
-
-// === Mock 种子数据 ===
-function seedWishes(): Wish[] {
-  const now = Date.now();
-  const hour = 3600000;
-  return [
-    {
-      id: 'w1',
-      fromUserId: 'user_b',
-      toUserId: 'user_a',
-      content: '想吃你做的番茄炒蛋',
-      category: 'food',
-      priority: 'urgent',
-      status: 'pending',
-      createdAt: now - hour * 2,
-      expireAt: new Date().setHours(23, 59, 59, 999),
-    },
-    {
-      id: 'w2',
-      fromUserId: 'user_a',
-      toUserId: 'user_b',
-      content: '今晚一起看电影吧',
-      category: 'romance',
-      priority: 'normal',
-      status: 'accepted',
-      createdAt: now - hour * 5,
-    },
-    {
-      id: 'w3',
-      fromUserId: 'user_b',
-      toUserId: 'user_a',
-      content: '帮我把衣服叠好',
-      category: 'chore',
-      priority: 'normal',
-      status: 'done',
-      createdAt: now - hour * 24,
-      completedAt: now - hour * 20,
-      proofNote: '叠好了！整整齐齐 ✨',
-    },
-    {
-      id: 'w4',
-      fromUserId: 'user_a',
-      toUserId: 'user_b',
-      content: '给我唱首歌',
-      category: 'romance',
-      priority: 'romantic',
-      status: 'postponed',
-      createdAt: now - hour * 30,
-    },
-    {
-      id: 'w5',
-      fromUserId: 'user_b',
-      toUserId: 'user_a',
-      content: '周末一起去公园散步',
-      category: 'company',
-      priority: 'normal',
-      status: 'pending',
-      createdAt: now - hour * 8,
-    },
-  ];
-}
+import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/modules/user/store';
 
 function generateId(): string {
   return `w_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export const useWishStore = defineStore('wish', () => {
-  // 初始化
-  const stored = storage.get<Wish[]>(STORAGE_KEY);
-  const wishes = ref<Wish[]>(stored && stored.length > 0 ? stored : seedWishes());
-
+  const wishes = ref<Wish[]>([]);
   const statusFilter = ref<'all' | 'pending' | 'active' | 'done'>('all');
-  const currentUserId = ref<string>('user_a');
+  const loaded = ref(false);
 
-  function setCurrentUserId(id: string) {
-    currentUserId.value = id;
+  function currentUserId(): string {
+    return useUserStore().currentUserId;
   }
 
+  function currentCoupleId(): string | null {
+    return useUserStore().coupleId;
+  }
+
+  // === 数据加载（从 Supabase） ===
+  async function loadWishes(): Promise<void> {
+    const cid = currentCoupleId();
+    if (!cid) return;
+
+    const { data, error } = await supabase
+      .from('wishes')
+      .select('*')
+      .eq('couple_id', cid)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      wishes.value = data.map(mapRowToWish);
+      loaded.value = true;
+    }
+  }
+
+  function mapRowToWish(row: Record<string, unknown>): Wish {
+    return {
+      id: row.id as string,
+      fromUserId: row.from_user_id as string,
+      toUserId: row.to_user_id as string,
+      content: row.content as string,
+      category: row.category as WishCategory,
+      priority: row.priority as WishPriority,
+      status: row.status as WishStatus,
+      imageUrl: row.image_url as string | undefined,
+      proofImageUrl: row.proof_image_url as string | undefined,
+      proofNote: row.proof_note as string | undefined,
+      createdAt: new Date(row.created_at as string).getTime(),
+      completedAt: row.completed_at ? new Date(row.completed_at as string).getTime() : undefined,
+      expireAt: row.expire_at ? new Date(row.expire_at as string).getTime() : undefined,
+    };
+  }
+
+  // === Realtime 订阅 ===
+  let channel: ReturnType<typeof supabase.channel> | null = null;
+
+  function subscribeRealtime(): void {
+    const cid = currentCoupleId();
+    if (!cid) return;
+
+    // 先清理旧订阅
+    if (channel) {
+      supabase.removeChannel(channel);
+    }
+
+    channel = supabase
+      .channel('wishes-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'wishes', filter: `couple_id=eq.${cid}` },
+        (payload) => {
+          if (payload.eventType === 'INSERT') {
+            const wish = mapRowToWish(payload.new);
+            if (!wishes.value.some(w => w.id === wish.id)) {
+              wishes.value.unshift(wish);
+            }
+          } else if (payload.eventType === 'UPDATE') {
+            const idx = wishes.value.findIndex(w => w.id === (payload.new as Record<string, unknown>).id);
+            if (idx !== -1) {
+              wishes.value[idx] = mapRowToWish(payload.new);
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const delId = (payload.old as Record<string, unknown>).id as string;
+            wishes.value = wishes.value.filter(w => w.id !== delId);
+          }
+        }
+      )
+      .subscribe();
+  }
+
+  // === 计算属性 ===
   const filteredWishes = computed(() => {
+    const uid = currentUserId();
     let list = wishes.value.filter(
-      (w) => w.toUserId === currentUserId.value || w.fromUserId === currentUserId.value,
+      (w) => w.toUserId === uid || w.fromUserId === uid,
     );
     switch (statusFilter.value) {
       case 'pending':
@@ -97,17 +110,17 @@ export const useWishStore = defineStore('wish', () => {
         list = list.filter((w) => w.status === 'done');
         break;
     }
-    return list.sort((a, b) => b.createdAt - a.createdAt);
+    return list;
   });
 
   const pendingCount = computed(
-    () => wishes.value.filter((w) => w.toUserId === currentUserId.value && w.status === 'pending').length,
+    () => wishes.value.filter((w) => w.toUserId === currentUserId() && w.status === 'pending').length,
   );
   const activeCount = computed(
     () =>
       wishes.value.filter(
         (w) =>
-          (w.toUserId === currentUserId.value || w.fromUserId === currentUserId.value) &&
+          (w.toUserId === currentUserId() || w.fromUserId === currentUserId()) &&
           (w.status === 'accepted' || w.status === 'postponed'),
       ).length,
   );
@@ -115,12 +128,13 @@ export const useWishStore = defineStore('wish', () => {
     () =>
       wishes.value.filter(
         (w) =>
-          (w.toUserId === currentUserId.value || w.fromUserId === currentUserId.value) &&
+          (w.toUserId === currentUserId() || w.fromUserId === currentUserId()) &&
           w.status === 'done',
       ).length,
   );
 
-  function addWish(data: {
+  // === 操作（async + Supabase） ===
+  async function addWish(data: {
     fromUserId: string;
     toUserId: string;
     content: string;
@@ -128,86 +142,112 @@ export const useWishStore = defineStore('wish', () => {
     priority: WishPriority;
     imageUrl?: string;
     anonymous?: boolean;
-  }) {
-    const wish: Wish = {
+  }): Promise<Wish | null> {
+    const cid = currentCoupleId();
+    if (!cid) return null;
+
+    const row = {
       id: generateId(),
-      ...data,
-      status: 'pending',
-      createdAt: Date.now(),
-      expireAt: new Date().setHours(23, 59, 59, 999),
+      couple_id: cid,
+      from_user_id: data.fromUserId,
+      to_user_id: data.toUserId,
+      content: data.content,
+      category: data.category,
+      priority: data.priority,
+      status: 'pending' as string,
+      image_url: data.imageUrl || null,
+      created_at: new Date().toISOString(),
+      expire_at: new Date(new Date().setHours(23, 59, 59, 999)).toISOString(),
     };
+
+    const { error } = await supabase.from('wishes').insert(row);
+    if (error) {
+      console.error('[Wish] Insert failed:', error.message);
+      return null;
+    }
+
+    const wish = mapRowToWish(row);
     wishes.value.unshift(wish);
-    persist();
+
+    // 通知对方
+    import('@/modules/notify/store').then(({ useNotifyStore }) => {
+      useNotifyStore().addNotification(
+        'wish_new',
+        '收到新的心愿！',
+        `TA 想要「${data.content}」`,
+        wish.id,
+      );
+    });
+
     return wish;
   }
 
-  function updateWishStatus(
+  async function updateWishStatus(
     id: string,
     status: WishStatus,
     extra?: { proofImageUrl?: string; proofNote?: string },
-  ) {
-    const wish = wishes.value.find((w) => w.id === id);
-    if (!wish) return;
-    wish.status = status;
+  ): Promise<void> {
+    const cid = currentCoupleId();
+    if (!cid) return;
+
+    const updateData: Record<string, unknown> = { status };
     if (status === 'done') {
-      wish.completedAt = Date.now();
-      if (extra?.proofImageUrl) wish.proofImageUrl = extra.proofImageUrl;
-      if (extra?.proofNote) wish.proofNote = extra.proofNote;
+      updateData.completed_at = new Date().toISOString();
+      if (extra?.proofImageUrl) updateData.proof_image_url = extra.proofImageUrl;
+      if (extra?.proofNote) updateData.proof_note = extra.proofNote;
     }
-    persist();
 
-    // 触发通知（动态导入避免循环依赖）
-    import('@/modules/notify/store').then(({ useNotifyStore }) => {
-      const notify = useNotifyStore();
-      const fromUser = wish!.fromUserId === 'user_a' ? '小兔子' : '小熊';
+    await supabase.from('wishes').update(updateData).eq('id', id).eq('couple_id', cid);
 
-      if (status === 'accepted') {
-        notify.addNotification(
-          'wish_accepted',
-          `${fromUser}接单了你的心愿`,
-          `「${wish!.content}」— ${fromUser}说交给我吧！`,
-          wish!.id,
-        );
-      } else if (status === 'done') {
-        notify.addNotification(
-          'wish_done',
-          '心愿已完成！',
-          `「${wish!.content}」— 已完成${wish!.proofNote ? '：' + wish!.proofNote : ''}`,
-          wish!.id,
-        );
-      } else if (status === 'postponed') {
-        notify.addNotification(
-          'wish_accepted',
-          `${fromUser}把心愿推迟了`,
-          `「${wish!.content}」— 改天再做`,
-          wish!.id,
-        );
+    const wish = wishes.value.find(w => w.id === id);
+    if (wish) {
+      wish.status = status;
+      if (status === 'done') {
+        wish.completedAt = Date.now();
+        if (extra?.proofImageUrl) wish.proofImageUrl = extra.proofImageUrl;
+        if (extra?.proofNote) wish.proofNote = extra.proofNote;
       }
-    });
+    }
 
-    // 加积分（完成心愿的接收方/执行方获得积分）
+    // 触发通知
+    if (wish) {
+      import('@/modules/notify/store').then(({ useNotifyStore }) => {
+        const notify = useNotifyStore();
+        const fromUser = wish.fromUserId === currentUserId() ? '你' : 'TA';
+        if (status === 'accepted') {
+          notify.addNotification('wish_accepted', `${fromUser}接单了你的心愿`, `「${wish.content}」— 交给我吧！`, wish.id);
+        } else if (status === 'done') {
+          notify.addNotification('wish_done', '心愿已完成！', `「${wish.content}」${wish.proofNote ? '：' + wish.proofNote : ''}`, wish.id);
+        } else if (status === 'postponed') {
+          notify.addNotification('wish_accepted', `${fromUser}把心愿推迟了`, `「${wish.content}」— 改天再做`, wish.id);
+        }
+      });
+    }
+
+    // 加积分
     import('@/modules/points/store').then(({ usePointsStore }) => {
-      const doerId = wish!.toUserId;
-      usePointsStore().earnPoints(doerId, 'wish_done');
+      if (wish) {
+        usePointsStore().earnPoints(wish.toUserId, 'wish_done');
+      }
     });
   }
 
-  function removeWish(id: string) {
+  async function removeWish(id: string): Promise<void> {
+    const cid = currentCoupleId();
+    if (!cid) return;
+
+    await supabase.from('wishes').delete().eq('id', id).eq('couple_id', cid);
     wishes.value = wishes.value.filter((w) => w.id !== id);
-    persist();
   }
 
   function getWishById(id: string): Wish | undefined {
     return wishes.value.find((w) => w.id === id);
   }
 
-  function persist() {
-    storage.set(STORAGE_KEY, wishes.value);
-  }
-
   return {
-    wishes, statusFilter, currentUserId,
+    wishes, statusFilter, loaded,
     filteredWishes, pendingCount, activeCount, doneCount,
-    setCurrentUserId, addWish, updateWishStatus, removeWish, getWishById,
+    loadWishes, subscribeRealtime,
+    addWish, updateWishStatus, removeWish, getWishById,
   };
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useWishStore } from '../store';
 import { useUserStore } from '@/modules/user/store';
@@ -11,9 +11,6 @@ import type { Wish, WishStatus } from '../types';
 const router = useRouter();
 const wishStore = useWishStore();
 const userStore = useUserStore();
-
-// Sync identity
-wishStore.setCurrentUserId(userStore.currentUserId);
 
 const filterTabs = [
   { key: 'all' as const, label: '全部' },
@@ -58,16 +55,13 @@ function onRefresh() {
   setTimeout(() => { refreshing.value = false; }, 600);
 }
 
-// Identity change listener
-function onIdentityChanged(e: Event) {
-  const detail = (e as CustomEvent).detail;
-  if (detail?.userId) {
-    wishStore.setCurrentUserId(detail.userId);
+onMounted(() => {
+  // Supabase 数据加载 + Realtime 订阅
+  if (!wishStore.loaded) {
+    wishStore.loadWishes();
+    wishStore.subscribeRealtime();
   }
-}
-
-onMounted(() => window.addEventListener('identity-changed', onIdentityChanged));
-onUnmounted(() => window.removeEventListener('identity-changed', onIdentityChanged));
+});
 </script>
 
 <template>
