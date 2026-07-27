@@ -1,15 +1,10 @@
 import './lib/supabase';
-import { createApp } from 'vue';
-import { createPinia } from 'pinia';
-import App from './App.vue';
-import router from './router';
 
-// Global styles
+// IMPORTANT: Modules MUST be imported BEFORE router — they self-register
+// routes via side-effect, and router reads the registry at import time.
+// Global styles and Vue core are safe to import anywhere.
 import './styles/reset.css';
 import './styles/animations.css';
-
-// Import all modules so they self-register via side-effect
-// Order matters: core modules first, then feature modules
 import './modules/theme';
 import './modules/notify';
 import './modules/interact';
@@ -18,6 +13,11 @@ import './modules/calendar';
 import './modules/user';
 import './modules/points';
 import './modules/diary';
+
+import { createApp } from 'vue';
+import { createPinia } from 'pinia';
+import App from './App.vue';
+import router from './router';
 
 const app = createApp(App);
 
