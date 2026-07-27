@@ -1,25 +1,28 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
-import type { Anniversary, CalendarDay } from './types';
-import { storage } from '@/core/storage';
+import type { Anniversary } from './types';
+import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/modules/user/store';
 import { useWishStore } from '@/modules/wish/store';
 
-const STORAGE_KEY = 'calendar_anniversaries';
+const ANNIVERSARIES_KEY = 'sweetbean_calendar_anniversaries';
 
-// Mock 种子纪念日
-function seedAnniversaries(): Anniversary[] {
-  const now = new Date();
-  const y = now.getFullYear();
-  return [
-    { id: 'a1', title: '在一起的日子 💕', date: `${y}-03-15`, icon: '💕', isRepeating: true },
-    { id: 'a2', title: '第一次旅行 ✈️', date: `${y}-05-20`, icon: '✈️', isRepeating: true },
-    { id: 'a3', title: '第一次接吻 💋', date: `${y}-01-08`, icon: '💋', isRepeating: true },
-  ];
+function currentUserId(): string {
+  return useUserStore().currentUserId;
 }
 
 export const useCalendarStore = defineStore('calendar', () => {
-  const stored = storage.get<Anniversary[]>(STORAGE_KEY);
-  const anniversaries = ref<Anniversary[]>(stored && stored.length > 0 ? stored : seedAnniversaries());
+  // 从 localStorage 加载纪念日（纯配置数据，非共享数据）
+  const anniversaries = ref<Anniversary[]>(
+    (() => {
+      try {
+        const raw = localStorage.getItem(ANNIVERSARIES_KEY);
+        return raw ? JSON.parse(raw) : [];
+      } catch {
+        return [];
+      }
+    })(),
+  );
   const selectedMonth = ref({ year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
   const selectedDate = ref<string>('');
 
@@ -38,40 +41,43 @@ export const useCalendarStore = defineStore('calendar', () => {
       .sort((a, b) => a.daysLeft - b.daysLeft);
   });
 
-  // === 日记缓存 ===
-  function getDiaryDateSet(): Set<string> {
-    try {
-      const raw = storage.get<{ createdAt: number; isPrivate: boolean; authorId: string }[]>('diary_entries', []) ?? [];
-      const currentUserId = storage.get<string>('currentUserId', 'user_a') ?? 'user_a';
-      const dates = new Set<string>();
-      for (const e of raw) {
-        if (!e.isPrivate || e.authorId === currentUserId) {
-          const dateStr = new Date(e.createdAt).toISOString().slice(0, 10);
-          dates.add(dateStr);
+  // === 日记缓存（从 Supabase 读取） ===
+  let diaryDateCache: Set<string> | null = null;
+
+  async function refreshDiaryCache(): Promise<void> {
+    const cid = useUserStore().coupleId;
+    if (!cid) return;
+    const uid = currentUserId();
+    const { data } = await supabase
+      .from('diary_entries')
+      .select('entry_date, is_private, author_id')
+      .eq('couple_id', cid);
+    if (data) {
+      diaryDateCache = new Set<string>();
+      for (const row of data) {
+        const r = row as Record<string, unknown>;
+        if (!(r.is_private as boolean) || (r.author_id as string) === uid) {
+          diaryDateCache.add(r.entry_date as string);
         }
       }
-      return dates;
-    } catch {
-      return new Set<string>();
     }
   }
 
-  // 缓存日记日期集合（避免每次 getDayMarks 都遍历全部条目）
-  let diaryDateCache: Set<string> | null = null;
-
-  function refreshDiaryCache() {
-    diaryDateCache = getDiaryDateSet();
+  function isDiaryDate(dateStr: string): boolean {
+    if (diaryDateCache === null) return false;
+    return diaryDateCache.has(dateStr);
   }
 
-  function isDiaryDate(dateStr: string): boolean {
-    if (diaryDateCache === null) refreshDiaryCache();
-    return diaryDateCache!.has(dateStr);
+  // === 签到日期缓存（由外部模块注入） ===
+  const checkinDateSet = ref<Set<string>>(new Set());
+
+  function setCheckinDates(dates: Set<string>) {
+    checkinDateSet.value = dates;
   }
 
   // 获取某天的标记
   function getDayMarks(dateStr: string): { hasWish: boolean; hasCheckIn: boolean; hasAnniversary: boolean; hasDiary: boolean } {
     let hasWish = false;
-    let hasCheckIn = false;
 
     try {
       const wishStore = useWishStore();
@@ -79,12 +85,11 @@ export const useCalendarStore = defineStore('calendar', () => {
         const d = new Date(w.createdAt).toISOString().slice(0, 10);
         return d === dateStr;
       });
-    } catch { /* store not available yet */ }
+    } catch {
+      /* store not available yet */
+    }
 
-    try {
-      const checkInDates = storage.get<string[]>('interact_checkin_dates', []) ?? [];
-      hasCheckIn = checkInDates.includes(dateStr);
-    } catch { /* ignore */ }
+    const hasCheckIn = checkinDateSet.value.has(dateStr);
 
     const hasAnniversary = anniversaries.value.some((a) => {
       const ad = new Date(a.date);
@@ -141,15 +146,23 @@ export const useCalendarStore = defineStore('calendar', () => {
   }
 
   function persist() {
-    storage.set(STORAGE_KEY, anniversaries.value);
+    localStorage.setItem(ANNIVERSARIES_KEY, JSON.stringify(anniversaries.value));
   }
 
   return {
-    anniversaries, selectedMonth, selectedDate,
+    anniversaries,
+    selectedMonth,
+    selectedDate,
     upcomingAnniversaries,
-    getDayMarks, getMonthGrid, getDateStr,
-    prevMonth, nextMonth,
-    addAnniversary, removeAnniversary,
+    checkinDateSet,
+    getDayMarks,
+    getMonthGrid,
+    getDateStr,
+    prevMonth,
+    nextMonth,
+    addAnniversary,
+    removeAnniversary,
     refreshDiaryCache,
+    setCheckinDates,
   };
 });

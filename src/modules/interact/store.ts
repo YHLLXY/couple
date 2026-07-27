@@ -1,10 +1,15 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { Sticker } from './types';
-import { storage } from '@/core/storage';
+import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/modules/user/store';
 
-const STORAGE_KEY_CHECKIN = 'interact_checkin_dates';
-const STORAGE_KEY_LOG = 'interact_activity_log';
+function currentUserId(): string {
+  return useUserStore().currentUserId;
+}
+function currentCoupleId(): string | null {
+  return useUserStore().coupleId;
+}
 
 export interface ActivityItem {
   id: string;
@@ -29,9 +34,25 @@ export const useInteractStore = defineStore('interact', () => {
   ]);
 
   // === 签到 ===
-  const checkInDates = ref<string[]>(storage.get<string[]>(STORAGE_KEY_CHECKIN, []) ?? []);
+  const checkInDates = ref<string[]>([]);
+  const loaded = ref(false);
   const today = () => new Date().toISOString().slice(0, 10);
   const checkedInToday = computed(() => checkInDates.value.includes(today()));
+
+  async function loadCheckins(): Promise<void> {
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+    if (!cid || !uid) return;
+    const { data } = await supabase
+      .from('checkins')
+      .select('check_date')
+      .eq('couple_id', cid)
+      .eq('user_id', uid);
+    if (data) {
+      checkInDates.value = data.map((r: Record<string, unknown>) => r.check_date as string);
+    }
+    loaded.value = true;
+  }
 
   function getConsecutiveDays(): number {
     const sorted = [...checkInDates.value].sort().reverse();
@@ -56,22 +77,38 @@ export const useInteractStore = defineStore('interact', () => {
 
   const consecutiveDays = computed(() => getConsecutiveDays());
 
-  function doCheckIn() {
+  async function doCheckIn() {
     const d = today();
-    if (!checkInDates.value.includes(d)) {
-      checkInDates.value.push(d);
-      storage.set(STORAGE_KEY_CHECKIN, checkInDates.value);
-      addActivity('checkin', '今天也想你 💕');
-      // 加积分
-      import('@/modules/points/store').then(({ usePointsStore }) => {
-        const uid = storage.get<string>('currentUserId', 'user_a') ?? 'user_a';
-        usePointsStore().earnPoints(uid, 'checkin');
+    if (checkInDates.value.includes(d)) return;
+
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+    if (!cid || !uid) return;
+
+    const { error } = await supabase
+      .from('checkins')
+      .insert({
+        couple_id: cid,
+        user_id: uid,
+        check_date: d,
       });
+
+    if (error) {
+      console.error('[Interact] Failed to insert checkin:', error.message);
+      return;
     }
+
+    checkInDates.value.push(d);
+    addActivity('checkin', '今天也想你 💕');
+
+    // 加积分
+    import('@/modules/points/store').then(({ usePointsStore }) => {
+      usePointsStore().earnPoints(uid, 'checkin');
+    });
   }
 
   // === 互动动态 ===
-  const activityLog = ref<ActivityItem[]>(storage.get<ActivityItem[]>(STORAGE_KEY_LOG, []) ?? []);
+  const activityLog = ref<ActivityItem[]>([]);
 
   function addActivity(type: 'checkin' | 'sticker', content: string, emoji?: string) {
     activityLog.value.unshift({
@@ -85,11 +122,30 @@ export const useInteractStore = defineStore('interact', () => {
     if (activityLog.value.length > 50) {
       activityLog.value = activityLog.value.slice(0, 50);
     }
-    storage.set(STORAGE_KEY_LOG, activityLog.value);
   }
 
-  function addSticker(sticker: Sticker) {
+  async function addSticker(sticker: Sticker) {
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+
+    // 持久化到 Supabase
+    if (cid && uid) {
+      supabase
+        .from('stickers')
+        .insert({
+          couple_id: cid,
+          sender_id: uid,
+          sticker_id: sticker.id,
+          emoji: sticker.emoji,
+          label: sticker.label,
+        })
+        .then(({ error }) => {
+          if (error) console.error('[Interact] Failed to insert sticker:', error.message);
+        });
+    }
+
     addActivity('sticker', `发送了「${sticker.label}」`, sticker.emoji);
+
     // 发送通知
     import('@/modules/notify/store').then(({ useNotifyStore }) => {
       useNotifyStore().addNotification(
@@ -98,9 +154,9 @@ export const useInteractStore = defineStore('interact', () => {
         `${sticker.emoji} TA发了一个「${sticker.label}」贴纸`,
       );
     });
+
     // 加积分
     import('@/modules/points/store').then(({ usePointsStore }) => {
-      const uid = storage.get<string>('currentUserId', 'user_a') ?? 'user_a';
       usePointsStore().earnPoints(uid, 'sticker_sent');
     });
   }
@@ -108,8 +164,10 @@ export const useInteractStore = defineStore('interact', () => {
   return {
     stickers,
     checkInDates,
+    loaded,
     checkedInToday,
     consecutiveDays,
+    loadCheckins,
     doCheckIn,
     activityLog,
     addSticker,

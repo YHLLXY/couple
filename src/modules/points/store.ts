@@ -2,28 +2,8 @@ import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { PointsRule, Reward, ExchangeRecord, PointsLedger } from './types';
 import { LEVEL_CONFIG } from './types';
-import { storage } from '@/core/storage';
-
-const STORAGE_PREFIX = 'points';
-
-// === 种子数据 ===
-function seedRules(): PointsRule[] {
-  return [
-    { id: 'r1', action: 'wish_done', label: '完成心愿', points: 20, enabled: true, cooldown: 0 },
-    { id: 'r2', action: 'checkin', label: '每日签到', points: 5, enabled: true, cooldown: 24 },
-    { id: 'r3', action: 'sticker_sent', label: '发贴纸', points: 2, enabled: true, cooldown: 1 },
-  ];
-}
-
-function seedRewards(): Reward[] {
-  const now = Date.now();
-  return [
-    { id: 'rd1', creatorId: 'user_a', title: '💆 按摩10分钟', cost: 50, icon: '💆', enabled: true, createdAt: now },
-    { id: 'rd2', creatorId: 'user_b', title: '🍳 做一顿早餐', cost: 60, icon: '🍳', enabled: true, createdAt: now },
-    { id: 'rd3', creatorId: 'user_a', title: '🎮 陪打游戏1小时', cost: 40, icon: '🎮', enabled: true, createdAt: now },
-    { id: 'rd4', creatorId: 'user_b', title: '🧹 帮我打扫房间', cost: 80, icon: '🧹', enabled: true, createdAt: now },
-  ];
-}
+import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/modules/user/store';
 
 function genId(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -35,45 +15,37 @@ function getLevel(balance: number) {
 }
 
 export const usePointsStore = defineStore('points', () => {
-  // === 状态（localStorage 持久化） ===
-  const balance = ref<Record<string, number>>(
-    storage.get<Record<string, number>>(`${STORAGE_PREFIX}_balance`, { user_a: 0, user_b: 0 }) ?? { user_a: 0, user_b: 0 }
-  );
-  const rules = ref<PointsRule[]>(
-    storage.get<PointsRule[]>(`${STORAGE_PREFIX}_rules`) ?? seedRules()
-  );
-  const rewards = ref<Reward[]>(
-    storage.get<Reward[]>(`${STORAGE_PREFIX}_rewards`) ?? seedRewards()
-  );
-  const exchanges = ref<ExchangeRecord[]>(
-    storage.get<ExchangeRecord[]>(`${STORAGE_PREFIX}_exchanges`, []) ?? []
-  );
-  const ledger = ref<PointsLedger[]>(
-    storage.get<PointsLedger[]>(`${STORAGE_PREFIX}_ledger`, []) ?? []
-  );
+  // === 状态 ===
+  const balance = ref<Record<string, number>>({});
+  const rules = ref<PointsRule[]>([
+    { id: 'r1', action: 'wish_done', label: '完成心愿', points: 20, enabled: true, cooldown: 0 },
+    { id: 'r2', action: 'checkin', label: '每日签到', points: 5, enabled: true, cooldown: 24 },
+    { id: 'r3', action: 'sticker_sent', label: '发贴纸', points: 2, enabled: true, cooldown: 1 },
+  ]);
+  const rewards = ref<Reward[]>([]);
+  const exchanges = ref<ExchangeRecord[]>([]);
+  const ledger = ref<PointsLedger[]>([]);
 
-  // === 当前用户（从 localStorage 读取，避免跨 store 依赖） ===
+  // === 当前用户 ===
   function currentUserId(): string {
-    return storage.get<string>('currentUserId', 'user_a') ?? 'user_a';
+    return useUserStore().currentUserId;
+  }
+  function currentCoupleId(): string | null {
+    return useUserStore().coupleId;
   }
 
   // === 计算属性 ===
   const currentBalance = computed(() => balance.value[currentUserId()] ?? 0);
-
   const currentLevel = computed(() => getLevel(currentBalance.value));
-
   const availableRewards = computed(() =>
     rewards.value.filter(r => r.enabled && r.creatorId !== currentUserId())
   );
-
   const myRewards = computed(() =>
     rewards.value.filter(r => r.creatorId === currentUserId())
   );
-
   const pendingExchanges = computed(() =>
     exchanges.value.filter(e => e.status === 'pending_confirm')
   );
-
   const recentLedger = computed(() =>
     ledger.value
       .filter(l => l.userId === currentUserId())
@@ -81,80 +53,112 @@ export const usePointsStore = defineStore('points', () => {
       .slice(0, 20)
   );
 
-  // === 持久化 ===
-  function save() {
-    storage.set(`${STORAGE_PREFIX}_balance`, balance.value);
-    storage.set(`${STORAGE_PREFIX}_rules`, rules.value);
-    storage.set(`${STORAGE_PREFIX}_rewards`, rewards.value);
-    storage.set(`${STORAGE_PREFIX}_exchanges`, exchanges.value);
-    storage.set(`${STORAGE_PREFIX}_ledger`, ledger.value);
+  // === 从 Supabase 刷新余额 ===
+  async function refreshBalance(): Promise<void> {
+    const cid = currentCoupleId();
+    if (!cid) return;
+    const { data, error } = await supabase
+      .from('points')
+      .select('user_id, amount')
+      .eq('couple_id', cid);
+    if (!error && data) {
+      const map: Record<string, number> = {};
+      for (const row of data) {
+        const uid = row.user_id as string;
+        map[uid] = (map[uid] ?? 0) + (row.amount as number);
+      }
+      balance.value = map;
+    }
   }
 
   // === 积分操作 ===
-  function earnPoints(userId: string, action: string): number {
+  async function earnPoints(userId: string, action: string): Promise<number> {
     const rule = rules.value.find(r => r.action === action && r.enabled);
     if (!rule) return 0;
 
-    // 冷却检查
+    // 冷却检查（基于本地 ledger）
     if (rule.cooldown > 0) {
       const recent = ledger.value.find(
         l => l.userId === userId && l.ruleId === rule.id &&
         (Date.now() - l.createdAt) < rule.cooldown * 3600000
       );
-      if (recent) return 0; // 冷却中，不加分
+      if (recent) return 0;
     }
 
-    const pts = rule.points;
-    balance.value[userId] = (balance.value[userId] ?? 0) + pts;
+    const cid = currentCoupleId();
+    if (!cid) return 0;
 
+    const pts = rule.points;
+    const now = Date.now();
+    const ledgerId = genId('pl');
+
+    const { error } = await supabase.from('points').insert({
+      id: ledgerId,
+      couple_id: cid,
+      user_id: userId,
+      amount: pts,
+      reason: rule.label,
+      created_at: new Date().toISOString(),
+    });
+    if (error) return 0;
+
+    balance.value[userId] = (balance.value[userId] ?? 0) + pts;
     ledger.value.push({
-      id: genId('pl'),
+      id: ledgerId,
       userId,
       amount: pts,
       reason: rule.label,
       ruleId: rule.id,
-      createdAt: Date.now(),
+      createdAt: now,
     });
-
-    save();
     return pts;
   }
 
-  function spendPoints(userId: string, amount: number, reason: string, exchangeId: string): boolean {
+  async function spendPoints(userId: string, amount: number, reason: string, exchangeId: string): Promise<boolean> {
     if ((balance.value[userId] ?? 0) < amount) return false;
 
-    balance.value[userId] -= amount;
+    const cid = currentCoupleId();
+    if (!cid) return false;
 
+    const now = Date.now();
+    const ledgerId = genId('pl');
+
+    const { error } = await supabase.from('points').insert({
+      id: ledgerId,
+      couple_id: cid,
+      user_id: userId,
+      amount: -amount,
+      reason,
+      created_at: new Date().toISOString(),
+    });
+    if (error) return false;
+
+    balance.value[userId] -= amount;
     ledger.value.push({
-      id: genId('pl'),
+      id: ledgerId,
       userId,
       amount: -amount,
       reason,
       exchangeId,
-      createdAt: Date.now(),
+      createdAt: now,
     });
-
-    save();
     return true;
   }
 
   // === 规则管理 ===
   function addRule(rule: PointsRule) {
     rules.value.push(rule);
-    save();
   }
 
   function updateRule(id: string, patch: Partial<PointsRule>) {
     const idx = rules.value.findIndex(r => r.id === id);
     if (idx !== -1) {
       rules.value[idx] = { ...rules.value[idx], ...patch };
-      save();
     }
   }
 
   function removeRule(id: string) {
     rules.value = rules.value.filter(r => r.id !== id);
-    save();
   }
 
   // === 奖励管理 ===
@@ -169,7 +173,6 @@ export const usePointsStore = defineStore('points', () => {
       createdAt: Date.now(),
     };
     rewards.value.push(reward);
-    save();
     return reward;
   }
 
@@ -177,7 +180,6 @@ export const usePointsStore = defineStore('points', () => {
     const reward = rewards.value.find(r => r.id === id);
     if (reward) {
       reward.enabled = !reward.enabled;
-      save();
     }
   }
 
@@ -185,7 +187,7 @@ export const usePointsStore = defineStore('points', () => {
   function requestExchange(rewardId: string): ExchangeRecord | null {
     const reward = rewards.value.find(r => r.id === rewardId);
     if (!reward || !reward.enabled) return null;
-    if (reward.creatorId === currentUserId()) return null; // 不能兑换自己创建的
+    if (reward.creatorId === currentUserId()) return null;
 
     if ((balance.value[currentUserId()] ?? 0) < reward.cost) return null;
 
@@ -197,7 +199,6 @@ export const usePointsStore = defineStore('points', () => {
       createdAt: Date.now(),
     };
     exchanges.value.push(record);
-    save();
 
     // 通知奖励创建者
     import('@/modules/notify/store').then(({ useNotifyStore }) => {
@@ -213,7 +214,7 @@ export const usePointsStore = defineStore('points', () => {
     return record;
   }
 
-  function confirmExchange(exchangeId: string): boolean {
+  async function confirmExchange(exchangeId: string): Promise<boolean> {
     const record = exchanges.value.find(e => e.id === exchangeId);
     if (!record || record.status !== 'pending_confirm') return false;
 
@@ -224,12 +225,11 @@ export const usePointsStore = defineStore('points', () => {
     if (reward.creatorId !== currentUserId()) return false;
 
     // 扣发起者积分
-    const ok = spendPoints(record.userId, reward.cost, `兑换：${reward.title}`, exchangeId);
+    const ok = await spendPoints(record.userId, reward.cost, `兑换：${reward.title}`, exchangeId);
     if (!ok) return false;
 
     record.status = 'done';
     record.confirmedAt = Date.now();
-    save();
 
     // 通知兑换发起者
     import('@/modules/notify/store').then(({ useNotifyStore }) => {
@@ -257,13 +257,13 @@ export const usePointsStore = defineStore('points', () => {
     }
 
     record.status = 'cancelled';
-    save();
   }
 
   return {
     balance, rules, rewards, exchanges, ledger,
     currentBalance, currentLevel, availableRewards, myRewards, pendingExchanges, recentLedger,
     currentUserId,
+    refreshBalance,
     earnPoints, spendPoints,
     addRule, updateRule, removeRule,
     createReward, toggleReward,

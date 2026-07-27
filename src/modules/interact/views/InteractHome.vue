@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { showToast } from 'vant';
 import { useInteractStore } from '../store';
 import type { Sticker } from '../types';
 
 const store = useInteractStore();
+
+onMounted(() => {
+  store.loadCheckins();
+});
 
 // 贴纸飘浮动效
 const floatingStickers = ref<{ id: string; emoji: string; x: number; delay: number }[]>([]);

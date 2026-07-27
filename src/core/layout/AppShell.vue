@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useNotifyStore } from '@/modules/notify/store';
 import IdentitySwitcher from '@/modules/user/components/IdentitySwitcher.vue';
@@ -17,6 +17,10 @@ const showBack = computed(() => {
 
 const router = useRouter();
 const notifyStore = useNotifyStore();
+
+onMounted(() => {
+  notifyStore.loadNotifications();
+});
 
 function onBack() {
   window.history.back();

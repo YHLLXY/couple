@@ -1,51 +1,143 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { AppNotification, NotificationType } from './types';
-import { storage } from '@/core/storage';
+import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/modules/user/store';
 
-const STORAGE_KEY = 'notifications';
-const MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30天
+function currentUserId(): string {
+  return useUserStore().currentUserId;
+}
 
-let nextId = 1;
+function currentCoupleId(): string | null {
+  return useUserStore().coupleId;
+}
+
+function mapRowToNotification(row: Record<string, unknown>): AppNotification {
+  return {
+    id: row.id as string,
+    type: row.type as NotificationType,
+    title: row.title as string,
+    body: row.body as string,
+    read: (row.read as boolean) || false,
+    createdAt: new Date(row.created_at as string).getTime(),
+    relatedId: row.related_wish_id as string | undefined,
+  };
+}
 
 export const useNotifyStore = defineStore('notify', () => {
-  const stored = storage.get<AppNotification[]>(STORAGE_KEY);
-  const notifications = ref<AppNotification[]>(stored || []);
+  const notifications = ref<AppNotification[]>([]);
   const pushEnabled = ref(false);
 
   const unreadCount = computed(() =>
     notifications.value.filter((n) => !n.read).length,
   );
 
-  function addNotification(type: NotificationType, title: string, body: string, relatedId?: string) {
-    const n: AppNotification = {
-      id: `notif_${nextId++}_${Date.now()}`,
-      type,
-      title,
-      body,
-      read: false,
-      createdAt: Date.now(),
-      relatedId,
-    };
-    notifications.value.unshift(n);
-    persist();
-    tryPush(n);
+  async function loadNotifications(): Promise<void> {
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+    if (!cid || !uid) return;
+
+    const { data } = await supabase
+      .from('notifications')
+      .select('*')
+      .eq('couple_id', cid)
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false });
+
+    if (data) {
+      notifications.value = data.map(mapRowToNotification);
+    }
   }
 
-  function markAsRead(id: string) {
-    const n = notifications.value.find((n) => n.id === id);
-    if (n) { n.read = true; }
-    persist();
+  async function addNotification(type: NotificationType, title: string, body: string, relatedId?: string) {
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+    if (!cid || !uid) return;
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .insert({
+        couple_id: cid,
+        user_id: uid,
+        type,
+        title,
+        body,
+        read: false,
+        related_wish_id: relatedId || null,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('[Notify] Failed to insert notification:', error.message);
+      return;
+    }
+
+    if (data) {
+      const n = mapRowToNotification(data);
+      notifications.value.unshift(n);
+      tryPush(n);
+    }
   }
 
-  function markAllRead() {
-    notifications.value.forEach((n) => { n.read = true; });
-    persist();
+  async function markAsRead(id: string) {
+    const uid = currentUserId();
+    if (!uid) return;
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('id', id)
+      .eq('user_id', uid);
+
+    if (error) {
+      console.error('[Notify] Failed to mark as read:', error.message);
+      return;
+    }
+
+    const n = notifications.value.find((item) => item.id === id);
+    if (n) {
+      n.read = true;
+    }
   }
 
-  function clearAll() {
+  async function markAllRead() {
+    const uid = currentUserId();
+    if (!uid) return;
+
+    const { error } = await supabase
+      .from('notifications')
+      .update({ read: true })
+      .eq('user_id', uid)
+      .eq('read', false);
+
+    if (error) {
+      console.error('[Notify] Failed to mark all read:', error.message);
+      return;
+    }
+
+    notifications.value.forEach((n) => {
+      n.read = true;
+    });
+  }
+
+  async function clearAll() {
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+    if (!cid || !uid) return;
+
+    const { error } = await supabase
+      .from('notifications')
+      .delete()
+      .eq('couple_id', cid)
+      .eq('user_id', uid);
+
+    if (error) {
+      console.error('[Notify] Failed to clear notifications:', error.message);
+      return;
+    }
+
     notifications.value = [];
-    persist();
   }
 
   function requestPushPermission() {
@@ -75,22 +167,9 @@ export const useNotifyStore = defineStore('notify', () => {
     }
   }
 
-  function cleanup() {
-    const cutoff = Date.now() - MAX_AGE_MS;
-    const before = notifications.value.length;
-    notifications.value = notifications.value.filter((n) => n.createdAt > cutoff);
-    if (notifications.value.length < before) persist();
-  }
-
-  function persist() {
-    storage.set(STORAGE_KEY, notifications.value);
-  }
-
-  // 初始化清理
-  cleanup();
-
   return {
     notifications, pushEnabled, unreadCount,
-    addNotification, markAsRead, markAllRead, clearAll, requestPushPermission,
+    loadNotifications, addNotification, markAsRead, markAllRead, clearAll,
+    requestPushPermission,
   };
 });
