@@ -4,6 +4,59 @@
 
 ---
 
+## 2026-07-28 — Vercel 部署 + Supabase Auth 调试
+
+### 1. ESM 导入顺序决定路由表是否为空
+
+**问题：** 生产环境 `Maximum call stack size exceeded`，本地开发正常。
+
+**根因：** `main.ts` 中 `import router from './router'` 在第 5 行，`import './modules/interact'` 在第 15 行。ES 模块按导入顺序求值，`router.ts` 在模块注册前就调用了 `getAllRoutes()`，此时 `moduleRegistry` 为空数组。路由表里没有 `/interact`，导致 `/` → `/interact`（找不到）→ 兜底 `/:pathMatch(.*)*` → `/` → 无限重定向。
+
+**为什么本地不报错：** Vite dev server 的 ESM 加载顺序与 Rollup 生产构建不同，dev 模式下所有导入会预解析。
+
+**解决：** 把所有 `./modules/*` 和样式文件导入移到 `router` 导入之前。任何依赖模块自注册（side-effect registration）的架构，必须确保注册发生在调用方之前。
+
+### 2. VITE_ 环境变量只能在 Vercel 云端构建时使用
+
+**问题：** 部署成功但页面报 `Invalid supabaseUrl: Must be a valid HTTP or HTTPS URL`。
+
+**根因：** CI 中 `vercel pull → vercel build --prod → vercel deploy --prebuilt` 流程在 GitHub Actions 里本地构建，但 `VITE_SUPABASE_URL` 只配在 Vercel 上。构建时 Vite 拿不到环境变量，嵌入空字符串。
+
+**解决：** 改用 `npx vercel deploy --prod --yes` 一步部署，让 Vercel 在自己的服务器上构建——那里才有配好的环境变量。**原则：Vercel 环境变量 ≠ GitHub Actions 环境变量，构建必须在对的机器上执行。**
+
+### 3. .vercel/project.json 必须提交到仓库才能 CI 部署
+
+**问题：** GitHub Actions 中 `vercel pull` 报 `Project not found`。
+
+**根因：** `.vercel/` 整个目录在 `.gitignore` 中。CI 拉代码后没有 `project.json`，`vercel pull` 不知道连哪个项目。用 `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID` 环境变量时值配错了，覆盖了也不管用。
+
+**解决：** `.gitignore` 改为只放行 `project.json` 和 `README.txt`（`!.vercel/project.json`），其他 `.vercel/` 内容仍忽略。project.json 只含项目 ID，不含密钥，提交是安全的。
+
+### 4. Supabase Magic Link 回调地址不能用 window.location.origin
+
+**问题：** 手机上点 Magic Link 跳转到 `localhost:5173`，连接被拒绝。
+
+**根因：** `sendMagicLink()` 里 `emailRedirectTo: window.location.origin + '/#/auth-callback'`，本地测试时 origin 是 `http://localhost:5173`。到了手机上 localhost 指向手机自己，不指向电脑。
+
+**解决：** 改为固定线上地址 `https://couple-chi-two.vercel.app/#/auth-callback`，或通过 `VITE_SITE_URL` 环境变量区分环境。
+
+### 5. Supabase Auth 验证域名在国内被墙
+
+**问题：** 手机上点 Magic Link 出现 `ERR_CONNECTION_REFUSED`。
+
+**根因：** Magic Link 流程是「邮箱 → Supabase 验证服务器（`xxx.supabase.co`）→ 你的网站」。Supabase 的验证域名在国内直连不通，即使网站部署在 Vercel（国内可访问）也不行。
+
+**解决：** 两种方案：(A) 开 VPN 点验证链接，登录后不需要；(B) 给 Supabase 配自定义域名跳过墙。后续考虑方案 B。
+
+### 6. Vercel 环境变量和 GitHub Actions Secrets 是两套独立系统
+
+**概念澄清：**
+- **Vercel Environment Variables**：配在 Vercel Dashboard → Settings → Environment Variables，仅在 Vercel 构建时可用。用于 `VITE_*` 等前端构建变量。
+- **GitHub Actions Secrets**：配在 GitHub → Settings → Secrets and variables → Actions，仅在 CI 运行时可用。用于 `VERCEL_TOKEN` 等部署认证变量。
+- 两者互不相通，也不能互相替代。
+
+---
+
 ## 2026-07-27 — 阶段 4c 后端接入（Supabase）
 
 ### 1. Store 接口不变，只换持久化层
