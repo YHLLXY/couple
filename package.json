@@ -17,7 +17,9 @@
   },
   "devDependencies": {
     "@vant/auto-import-resolver": "^1.2.0",
+    "@vitejs/plugin-legacy": "^5.4.3",
     "@vitejs/plugin-vue": "^5.0.0",
+    "terser": "^5.49.0",
     "typescript": "^5.4.0",
     "unplugin-auto-import": "^0.18.0",
     "unplugin-vue-components": "^0.27.0",

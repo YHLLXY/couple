@@ -4,6 +4,7 @@ import AutoImport from 'unplugin-auto-import/vite';
 import Components from 'unplugin-vue-components/vite';
 import { VantResolver } from '@vant/auto-import-resolver';
 import { VitePWA } from 'vite-plugin-pwa';
+import legacy from '@vitejs/plugin-legacy';
 import { fileURLToPath, URL } from 'node:url';
 
 export default defineConfig({
@@ -14,6 +15,9 @@ export default defineConfig({
     }),
     Components({
       resolvers: [VantResolver()],
+    }),
+    legacy({
+      targets: ['defaults', 'Android >= 5', 'iOS >= 12'],
     }),
     VitePWA({
       registerType: 'autoUpdate',
