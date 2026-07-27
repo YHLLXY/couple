@@ -1,6 +1,6 @@
 <!-- src/modules/diary/views/DiaryHome.vue -->
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue';
+import { computed, ref, watch, nextTick, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useDiaryStore } from '../store';
 import DiaryCard from '../components/DiaryCard.vue';
@@ -34,6 +34,13 @@ function onCardClick(entry: DiaryEntry) {
 function goWrite() {
   router.push('/diary/write');
 }
+
+// Supabase 数据加载
+onMounted(() => {
+  if (!store.loaded) {
+    store.loadEntries();
+  }
+});
 
 // 从日历跳过来时滚动到对应日期
 const dateSectionRefs = ref<Record<string, HTMLElement | null>>({});

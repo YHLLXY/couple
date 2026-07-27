@@ -1,75 +1,61 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type { DiaryEntry } from './types';
-import { storage } from '@/core/storage';
-
-const STORAGE_KEY = 'diary_entries';
-
-// 种子数据
-function seedEntries(): DiaryEntry[] {
-  const now = Date.now();
-  const day = 86400000;
-  return [
-    {
-      id: 'd1',
-      content: '今天是我们在一起的第 100 天！一起去吃了火锅，然后看了电影。好幸福的一天 💕',
-      images: [],
-      authorId: 'user_a',
-      isPrivate: false,
-      createdAt: now - day * 2,
-    },
-    {
-      id: 'd2',
-      content: '给 TA 做了番茄炒蛋，虽然有点咸但 TA 说很好吃 🥹',
-      images: [],
-      authorId: 'user_b',
-      isPrivate: false,
-      createdAt: now - day * 2 + 3600000,
-    },
-    {
-      id: 'd3',
-      content: '今天工作好累，但回家看到 TA 的消息就感觉好多了 🌙',
-      images: [],
-      authorId: 'user_a',
-      isPrivate: false,
-      createdAt: now - day * 5,
-    },
-    {
-      id: 'd4',
-      content: '偷偷写一条私密日记，只有我自己能看到 🤫',
-      images: [],
-      authorId: 'user_a',
-      isPrivate: true,
-      createdAt: now - day,
-    },
-  ];
-}
+import { supabase } from '@/lib/supabase';
+import { useUserStore } from '@/modules/user/store';
 
 function genId(): string {
   return `d_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export const useDiaryStore = defineStore('diary', () => {
-  // === 状态 ===
-  const entries = ref<DiaryEntry[]>(
-    storage.get<DiaryEntry[]>(STORAGE_KEY) ?? seedEntries()
-  );
+  const entries = ref<DiaryEntry[]>([]);
+  const loaded = ref(false);
 
-  // === 当前用户 ===
   function currentUserId(): string {
-    return storage.get<string>('currentUserId', 'user_a') ?? 'user_a';
+    return useUserStore().currentUserId;
+  }
+
+  function currentCoupleId(): string | null {
+    return useUserStore().coupleId;
+  }
+
+  // === 数据加载 ===
+  async function loadEntries(): Promise<void> {
+    const cid = currentCoupleId();
+    if (!cid) return;
+
+    const { data, error } = await supabase
+      .from('diary_entries')
+      .select('*')
+      .eq('couple_id', cid)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      entries.value = data.map(mapRowToEntry);
+      loaded.value = true;
+    }
+  }
+
+  function mapRowToEntry(row: Record<string, unknown>): DiaryEntry {
+    return {
+      id: row.id as string,
+      content: row.content as string,
+      images: (row.images as string[]) || [],
+      authorId: row.author_id as string,
+      isPrivate: (row.is_private as boolean) || false,
+      createdAt: new Date(row.created_at as string).getTime(),
+      updatedAt: row.updated_at ? new Date(row.updated_at as string).getTime() : undefined,
+    };
   }
 
   // === 计算属性 ===
-
-  /** 当前用户可见的条目（过滤掉他人的私密） */
   const visibleEntries = computed(() =>
     entries.value
       .filter(e => !e.isPrivate || e.authorId === currentUserId())
       .sort((a, b) => b.createdAt - a.createdAt)
   );
 
-  /** 按日期分组 */
   const entriesByDate = computed(() => {
     const map = new Map<string, DiaryEntry[]>();
     for (const e of visibleEntries.value) {
@@ -81,7 +67,6 @@ export const useDiaryStore = defineStore('diary', () => {
     return map;
   });
 
-  /** 有日记的日期集合（供日历消费） */
   const diaryDates = computed(() => {
     const dates = new Set<string>();
     for (const e of entries.value) {
@@ -92,48 +77,80 @@ export const useDiaryStore = defineStore('diary', () => {
     return dates;
   });
 
-  // === 持久化 ===
-  function save() {
-    storage.set(STORAGE_KEY, entries.value);
-  }
-
   // === 操作 ===
+  async function addEntry(content: string, dateStr: string, isPrivate: boolean): Promise<DiaryEntry | null> {
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+    if (!cid || !uid) return null;
 
-  function addEntry(content: string, dateStr: string, isPrivate: boolean): DiaryEntry {
-    const [y, m, d] = dateStr.split('-').map(Number);
-    const createdAt = new Date(y, m - 1, d, 12, 0, 0).getTime();
-    const entry: DiaryEntry = {
+    const row = {
       id: genId(),
+      couple_id: cid,
+      author_id: uid,
       content,
-      images: [],
-      authorId: currentUserId(),
-      isPrivate,
-      createdAt,
+      is_private: isPrivate,
+      entry_date: dateStr,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     };
+
+    const { error } = await supabase.from('diary_entries').insert(row);
+    if (error) {
+      console.error('[Diary] Insert failed:', error.message);
+      return null;
+    }
+
+    const entry = mapRowToEntry(row);
     entries.value.push(entry);
-    save();
     return entry;
   }
 
-  function updateEntry(id: string, content: string, isPrivate: boolean, dateStr?: string): boolean {
-    const entry = entries.value.find(e => e.id === id);
-    if (!entry || entry.authorId !== currentUserId()) return false;
-    entry.content = content;
-    entry.isPrivate = isPrivate;
-    entry.updatedAt = Date.now();
+  async function updateEntry(id: string, content: string, isPrivate: boolean, dateStr?: string): Promise<boolean> {
+    const cid = currentCoupleId();
+    if (!cid) return false;
+
+    const updateData: Record<string, unknown> = { content, is_private: isPrivate, updated_at: new Date().toISOString() };
     if (dateStr) {
-      const [y, m, d] = dateStr.split('-').map(Number);
-      entry.createdAt = new Date(y, m - 1, d, 12, 0, 0).getTime();
+      updateData.entry_date = dateStr;
     }
-    save();
+
+    const { error } = await supabase
+      .from('diary_entries')
+      .update(updateData)
+      .eq('id', id)
+      .eq('couple_id', cid);
+
+    if (error) {
+      console.error('[Diary] Update failed:', error.message);
+      return false;
+    }
+
+    const entry = entries.value.find(e => e.id === id);
+    if (entry && entry.authorId === currentUserId()) {
+      entry.content = content;
+      entry.isPrivate = isPrivate;
+      entry.updatedAt = Date.now();
+      if (dateStr) {
+        entry.createdAt = new Date(dateStr).getTime();
+      }
+    }
+
     return true;
   }
 
-  function deleteEntry(id: string): boolean {
-    const entry = entries.value.find(e => e.id === id);
-    if (!entry || entry.authorId !== currentUserId()) return false;
+  async function deleteEntry(id: string): Promise<boolean> {
+    const cid = currentCoupleId();
+    if (!cid) return false;
+
+    const { error } = await supabase
+      .from('diary_entries')
+      .delete()
+      .eq('id', id)
+      .eq('couple_id', cid);
+
+    if (error) return false;
+
     entries.value = entries.value.filter(e => e.id !== id);
-    save();
     return true;
   }
 
@@ -142,8 +159,9 @@ export const useDiaryStore = defineStore('diary', () => {
   }
 
   return {
-    entries, visibleEntries, entriesByDate, diaryDates,
+    entries, loaded, visibleEntries, entriesByDate, diaryDates,
     currentUserId,
+    loadEntries,
     addEntry, updateEntry, deleteEntry, getEntryById,
   };
 });

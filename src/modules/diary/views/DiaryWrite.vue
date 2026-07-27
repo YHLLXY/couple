@@ -66,10 +66,10 @@ async function handleSave() {
   }
 
   if (isEdit.value) {
-    store.updateEntry(route.query.id as string, content.value.trim(), isPrivate.value, dateStr.value);
+    await store.updateEntry(route.query.id as string, content.value.trim(), isPrivate.value, dateStr.value);
     showToast('已更新');
   } else {
-    store.addEntry(content.value.trim(), dateStr.value, isPrivate.value);
+    await store.addEntry(content.value.trim(), dateStr.value, isPrivate.value);
     showToast('已保存');
   }
   router.back();
@@ -80,8 +80,8 @@ function handleDelete() {
   showDialog({
     title: '删除日记',
     message: '删除后无法恢复',
-  }).then(() => {
-    store.deleteEntry(route.query.id as string);
+  }).then(async () => {
+    await store.deleteEntry(route.query.id as string);
     showToast('已删除');
     router.back();
   }).catch(() => {});
