@@ -4,6 +4,45 @@
 
 ---
 
+## 2026-07-28 — Supabase Auth 登录流程调试（续）
+
+### 7. Supabase Site URL 必须设为线上地址
+
+**问题：** Magic Link 邮件里的 `redirect_to` 始终是 `http://localhost:5173`，代码里写的 `emailRedirectTo` 没生效。
+
+**根因：** Supabase Dashboard → Authentication → URL Configuration → **Site URL** 默认填了创建项目时的 `localhost:5173`。如果 `emailRedirectTo` 不在允许的 Redirect URL 列表里（或格式不匹配），Supabase 会忽略它，直接用 Site URL 作为回调地址。
+
+**解决：** 将 Site URL 改为 `https://couple-chi-two.vercel.app`，同时确保 Redirect URLs 里包含 `https://couple-chi-two.vercel.app/#/auth-callback`。
+
+**如何避免：** 首次配 Supabase Auth 时，Site URL 和 Redirect URLs 一起改，不要只改一个。
+
+### 8. Hash 路由 + Supabase 回调 = 双 Hash 冲突
+
+**问题：** 修正 Site URL 后，回调能跳转了，但 `getSession()` 拿不到登录态。AuthCallback 以为没登录 → 引导注册 → Register 也检测不到 session → 踢回登录页。
+
+**根因：** Magic Link 回调 URL 格式为：
+```
+/#/auth-callback#access_token=xxx&refresh_token=xxx
+```
+Vue Router hash (`#/auth-callback`) 和 Supabase auth hash (`#access_token=xxx`) 混在同一个 URL 里。`detectSessionInUrl` 用 `URLSearchParams` 解析时，`#` 之后的 `access_token` 被当成路由路径的一部分，解析失败。
+
+**解决：**
+1. 关掉 `detectSessionInUrl: false`
+2. 在 AuthCallback 中手动拆分 hash：
+```typescript
+const idx = hash.indexOf('access_token=');
+const authPart = hash.substring(idx);
+const params = new URLSearchParams(authPart);
+await supabase.auth.setSession({
+  access_token: params.get('access_token'),
+  refresh_token: params.get('refresh_token'),
+});
+```
+
+**如何避免：** 使用 Hash 路由的项目，`detectSessionInUrl` 默认关掉，改为手动解析。不要同时依赖两个 `#` 前缀的 URL 机制。
+
+---
+
 ## 2026-07-28 — Vercel 部署 + Supabase Auth 调试
 
 ### 1. ESM 导入顺序决定路由表是否为空
