@@ -18,7 +18,7 @@ export const supabase = createClient<Database>(
     auth: {
       persistSession: true,
       autoRefreshToken: true,
-      detectSessionInUrl: true,
+      detectSessionInUrl: false, // 手动在 AuthCallback 中处理，避免双 Hash 冲突
     },
   }
 );

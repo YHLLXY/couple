@@ -9,7 +9,22 @@ const userStore = useUserStore();
 const status = ref<'processing' | 'registered' | 'need_register'>('processing');
 
 onMounted(async () => {
-  // Supabase SDK 会自动从 URL hash 中解析 Magic Link 的 token
+  // 手动从嵌套 Hash 中提取 Supabase token
+  // URL 格式: /#/auth-callback#access_token=xxx&refresh_token=xxx&...
+  const hash = window.location.hash;
+  if (hash.includes('access_token=')) {
+    const idx = hash.indexOf('access_token=');
+    const authPart = hash.substring(idx);
+    const params = new URLSearchParams(authPart);
+    const access_token = params.get('access_token');
+    const refresh_token = params.get('refresh_token');
+
+    if (access_token && refresh_token) {
+      await supabase.auth.setSession({ access_token, refresh_token });
+    }
+  }
+
+  // 检查是否有有效 session
   const { data: { session }, error: authError } = await supabase.auth.getSession();
 
   if (authError || !session?.user) {
