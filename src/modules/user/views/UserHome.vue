@@ -3,12 +3,14 @@ import { onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '../store';
 import { useThemeStore } from '@/modules/theme/store';
+import { useDiaryStore } from '@/modules/diary/store';
 import { THEME_LIST } from '@/modules/theme/types';
 import PointsBadge from '@/modules/points/components/PointsBadge.vue';
 
 const router = useRouter();
 const userStore = useUserStore();
 const themeStore = useThemeStore();
+const diaryStore = useDiaryStore();
 
 function cycleTheme() {
   const themes = THEME_LIST.map(t => t.name);
@@ -71,7 +73,14 @@ function handleProfileClick() {
       <van-cell title="🎨 主题" :value="currentThemeLabel" is-link @click="cycleTheme" />
       <van-cell title="🎨 主题切换" is-link to="/settings" />
       <van-cell title="🪙 积分中心" is-link to="/points" />
-      <van-cell title="📔 共同日记" is-link to="/diary" />
+      <van-cell title="📔 共同日记" is-link to="/diary">
+        <template v-if="diaryStore.hasUnreadPartnerDiary" #title>
+          <span class="diary-cell-title">
+            📔 共同日记
+            <span class="star-badge-inline">⭐</span>
+          </span>
+        </template>
+      </van-cell>
       <van-cell title="📋 关于小甜豆" is-link to="/about" />
     </div>
   </div>
@@ -137,5 +146,21 @@ function handleProfileClick() {
 
 .profile-code--hint {
   color: var(--color-primary);
+}
+
+/* 日记菜单星光徽章 */
+.diary-cell-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.star-badge-inline {
+  font-size: 14px;
+  animation: starPulse 1.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px rgba(255, 200, 50, 0.6));
+}
+@keyframes starPulse {
+  0%, 100% { opacity: 0.6; transform: scale(0.9); }
+  50% { opacity: 1; transform: scale(1.2); }
 }
 </style>

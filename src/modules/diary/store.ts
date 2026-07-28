@@ -8,9 +8,22 @@ function genId(): string {
   return `d_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
+const LAST_SEEN_KEY = 'sweetbean_last_seen_diary';
+
+function getLastSeen(): number {
+  try {
+    return Number(localStorage.getItem(LAST_SEEN_KEY)) || 0;
+  } catch { return 0; }
+}
+
+function setLastSeen(ts: number): void {
+  try { localStorage.setItem(LAST_SEEN_KEY, String(ts)); } catch { /* ignore */ }
+}
+
 export const useDiaryStore = defineStore('diary', () => {
   const entries = ref<DiaryEntry[]>([]);
   const loaded = ref(false);
+  const lastSeenAt = ref(getLastSeen());
 
   function currentUserId(): string {
     return useUserStore().currentUserId;
@@ -18,6 +31,23 @@ export const useDiaryStore = defineStore('diary', () => {
 
   function currentCoupleId(): string | null {
     return useUserStore().coupleId;
+  }
+
+  // === 未读检测：TA 写的公开日记，我没看过 ===
+  const unreadPartnerEntries = computed(() =>
+    entries.value.filter(e =>
+      e.authorId !== currentUserId() &&
+      !e.isPrivate &&
+      e.createdAt > lastSeenAt.value
+    )
+  );
+
+  const hasUnreadPartnerDiary = computed(() => unreadPartnerEntries.value.length > 0);
+
+  /** 标记已读：更新 lastSeenAt 为当前时间 */
+  function markDiarySeen(): void {
+    lastSeenAt.value = Date.now();
+    setLastSeen(lastSeenAt.value);
   }
 
   // === 数据加载 ===
@@ -35,6 +65,34 @@ export const useDiaryStore = defineStore('diary', () => {
       entries.value = data.map(mapRowToEntry);
       loaded.value = true;
     }
+  }
+
+  // === Realtime 订阅：监听 TA 的新日记 ===
+  let channel: ReturnType<typeof supabase.channel> | null = null;
+
+  function subscribeRealtime(): void {
+    const cid = currentCoupleId();
+    if (!cid) return;
+
+    if (channel) {
+      supabase.removeChannel(channel);
+    }
+
+    channel = supabase
+      .channel('diary-changes')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'diary_entries', filter: `couple_id=eq.${cid}` },
+        (payload) => {
+          const row = payload.new as Record<string, unknown>;
+          const entry = mapRowToEntry(row);
+          // 只添加不存在的（避免重复）
+          if (!entries.value.some(e => e.id === entry.id)) {
+            entries.value.unshift(entry);
+          }
+        }
+      )
+      .subscribe();
   }
 
   function mapRowToEntry(row: Record<string, unknown>): DiaryEntry {
@@ -160,8 +218,10 @@ export const useDiaryStore = defineStore('diary', () => {
 
   return {
     entries, loaded, visibleEntries, entriesByDate, diaryDates,
+    lastSeenAt, unreadPartnerEntries, hasUnreadPartnerDiary,
     currentUserId,
-    loadEntries,
+    loadEntries, subscribeRealtime,
     addEntry, updateEntry, deleteEntry, getEntryById,
+    markDiarySeen,
   };
 });

@@ -1,12 +1,18 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
 import { showToast } from 'vant';
 import { useInteractStore } from '../store';
 import { useUserStore } from '@/modules/user/store';
+import { useDiaryStore } from '@/modules/diary/store';
 import type { Sticker } from '../types';
 
+const router = useRouter();
 const store = useInteractStore();
 const userStore = useUserStore();
+const diaryStore = useDiaryStore();
+
+const showBean = ref(false);
 
 onMounted(async () => {
   // 确保用户数据已加载
@@ -16,6 +22,17 @@ onMounted(async () => {
   // 加载签到数据 + 从 Supabase 恢复互动动态
   await store.loadCheckins();
   await store.loadActivities();
+
+  // 加载日记数据以检测未读
+  if (!diaryStore.loaded && userStore.coupleId) {
+    await diaryStore.loadEntries();
+    diaryStore.subscribeRealtime();
+  }
+  // 如果 TA 有未读的公开日记，显示小豆子
+  if (diaryStore.hasUnreadPartnerDiary) {
+    // 延迟一下让入场动画更自然
+    setTimeout(() => { showBean.value = true; }, 800);
+  }
 });
 
 // 贴纸飘浮动效
@@ -58,6 +75,12 @@ function formatTime(ts: number): string {
   if (hr < 24) return `${hr}小时前`;
   return `${Math.floor(hr / 24)}天前`;
 }
+
+function onBeanClick() {
+  showBean.value = false;
+  diaryStore.markDiarySeen();
+  router.push('/diary');
+}
 </script>
 
 <template>
@@ -78,6 +101,22 @@ function formatTime(ts: number): string {
         🔥 已连续签到 <strong>{{ store.consecutiveDays }}</strong> 天
       </p>
     </div>
+
+    <!-- 🫘 小豆子悄悄话：TA 写了公开日记时出现 -->
+    <Transition name="bean-whisper">
+      <div v-if="showBean" class="bean-whisper" @click="onBeanClick">
+        <div class="bean-whisper__avatar">
+          <span class="bean-char">🫘</span>
+          <span class="bean-sparkle s1">✨</span>
+          <span class="bean-sparkle s2">💕</span>
+          <span class="bean-sparkle s3">⭐</span>
+        </div>
+        <div class="bean-whisper__bubble">
+          <p class="bubble-text">嘘... TA 今天写了日记哦</p>
+          <span class="bubble-arrow" />
+        </div>
+      </div>
+    </Transition>
 
     <!-- 贴纸墙 -->
     <div class="sticker-section">
@@ -134,6 +173,134 @@ function formatTime(ts: number): string {
   padding: var(--space-base);
   padding-bottom: calc(var(--tabbar-height) + var(--safe-area-bottom) + 24px);
   position: relative;
+}
+
+/* 🫘 小豆子悄悄话 */
+.bean-whisper {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 14px 16px;
+  margin: 0 var(--space-base) var(--space-base);
+  background: linear-gradient(135deg, #FFF5F7, #FFEEF2);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 122, 149, 0.15);
+  cursor: pointer;
+  position: relative;
+  overflow: visible;
+  animation: beanSlideIn 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.bean-whisper:active {
+  transform: scale(0.98);
+  background: linear-gradient(135deg, #FFEEF2, #FFE5EA);
+}
+
+/* 豆子头像 + 星星 */
+.bean-whisper__avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #FF7A95, #FF9DB5);
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(255, 122, 149, 0.35);
+}
+.bean-char {
+  font-size: 24px;
+  animation: beanWiggle 2s ease-in-out infinite;
+}
+.bean-sparkle {
+  position: absolute;
+  font-size: 10px;
+  pointer-events: none;
+  animation: sparkleFloat 1.5s ease-in-out infinite;
+}
+.bean-sparkle.s1 { top: -6px; right: -2px; animation-delay: 0s; }
+.bean-sparkle.s2 { bottom: -4px; left: -4px; animation-delay: 0.5s; }
+.bean-sparkle.s3 { top: -2px; left: -6px; animation-delay: 1s; }
+
+@keyframes beanWiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(5deg); }
+  75% { transform: rotate(-5deg); }
+}
+
+@keyframes sparkleFloat {
+  0%, 100% { opacity: 0; transform: scale(0.5) translateY(0); }
+  50% { opacity: 1; transform: scale(1.2) translateY(-4px); }
+}
+
+/* 气泡对话框 */
+.bean-whisper__bubble {
+  flex: 1;
+  position: relative;
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+}
+
+.bubble-text {
+  font-size: 14px;
+  color: #555;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  border-right: 2px solid var(--color-primary);
+  animation:
+    typing 2s steps(11, end),
+    blink 0.6s step-end infinite;
+  max-width: fit-content;
+}
+
+@keyframes typing {
+  from { max-width: 0; }
+  to { max-width: 100%; }
+}
+
+@keyframes blink {
+  50% { border-right-color: transparent; }
+}
+
+.bubble-arrow {
+  position: absolute;
+  left: -6px;
+  top: 14px;
+  width: 0;
+  height: 0;
+  border-top: 6px solid transparent;
+  border-bottom: 6px solid transparent;
+  border-right: 6px solid #fff;
+}
+
+/* 豆子入场 */
+@keyframes beanSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* 过渡动画 */
+.bean-whisper-enter-active {
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.bean-whisper-leave-active {
+  transition: all 0.25s ease;
+}
+.bean-whisper-enter-from,
+.bean-whisper-leave-to {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
 }
 
 /* 签到区 */

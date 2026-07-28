@@ -35,11 +35,14 @@ function goWrite() {
   router.push('/diary/write');
 }
 
-// Supabase 数据加载
-onMounted(() => {
+// Supabase 数据加载 + Realtime 订阅
+onMounted(async () => {
   if (!store.loaded) {
-    store.loadEntries();
+    await store.loadEntries();
+    store.subscribeRealtime();
   }
+  // 用户进入了日记页 → 标记已读（清除未读提醒）
+  store.markDiarySeen();
 });
 
 // 从日历跳过来时滚动到对应日期
