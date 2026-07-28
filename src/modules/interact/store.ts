@@ -34,22 +34,47 @@ export const useInteractStore = defineStore('interact', () => {
   ]);
 
   // === 签到 ===
-  const checkInDates = ref<string[]>([]);
+  const CHECKIN_CACHE_KEY = 'sweetbean_checkins';
+  const checkInDates = ref<string[]>(loadLocalCheckins());
   const loaded = ref(false);
   const today = () => new Date().toISOString().slice(0, 10);
   const checkedInToday = computed(() => checkInDates.value.includes(today()));
 
+  /** 从 localStorage 加载签到日期 */
+  function loadLocalCheckins(): string[] {
+    try {
+      const raw = localStorage.getItem(CHECKIN_CACHE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+
+  /** 持久化签到日期到 localStorage */
+  function persistCheckins(): void {
+    try {
+      localStorage.setItem(CHECKIN_CACHE_KEY, JSON.stringify(checkInDates.value));
+    } catch { /* 静默跳过 */ }
+  }
+
   async function loadCheckins(): Promise<void> {
+    // 始终从本地加载
+    checkInDates.value = loadLocalCheckins();
+
+    // 如果已绑定，从 Supabase 同步（合并远程数据）
     const cid = currentCoupleId();
     const uid = currentUserId();
-    if (!cid || !uid) return;
-    const { data } = await supabase
-      .from('checkins')
-      .select('check_date')
-      .eq('couple_id', cid)
-      .eq('user_id', uid);
-    if (data) {
-      checkInDates.value = data.map((r: Record<string, unknown>) => r.check_date as string);
+    if (cid && uid) {
+      const { data } = await supabase
+        .from('checkins')
+        .select('check_date')
+        .eq('couple_id', cid)
+        .eq('user_id', uid);
+      if (data) {
+        const remote = data.map((r: Record<string, unknown>) => r.check_date as string);
+        // 合并：本地 + 远程去重
+        const merged = new Set([...checkInDates.value, ...remote]);
+        checkInDates.value = [...merged].sort();
+        persistCheckins();
+      }
     }
     loaded.value = true;
   }
@@ -77,28 +102,15 @@ export const useInteractStore = defineStore('interact', () => {
 
   const consecutiveDays = computed(() => getConsecutiveDays());
 
-  async function doCheckIn() {
+  async function doCheckIn(): Promise<{ success: boolean; reason?: string }> {
     const d = today();
-    if (checkInDates.value.includes(d)) return;
-
-    const cid = currentCoupleId();
-    const uid = currentUserId();
-    if (!cid || !uid) return;
-
-    const { error } = await supabase
-      .from('checkins')
-      .insert({
-        couple_id: cid,
-        user_id: uid,
-        check_date: d,
-      });
-
-    if (error) {
-      console.error('[Interact] Failed to insert checkin:', error.message);
-      return;
+    if (checkInDates.value.includes(d)) {
+      return { success: false, reason: '今天已经签到过了' };
     }
 
+    // ✅ 始终本地存储（不依赖绑定状态）
     checkInDates.value.push(d);
+    persistCheckins();
     addActivity('checkin', '今天也想你 💕');
 
     // 同步到日历 store（让日历小绿点实时更新）
@@ -109,10 +121,24 @@ export const useInteractStore = defineStore('interact', () => {
       calStore.setCheckinDates(updated);
     });
 
-    // 加积分
-    import('@/modules/points/store').then(({ usePointsStore }) => {
-      usePointsStore().earnPoints(uid, 'checkin');
-    });
+    // 如果已绑定，同步到 Supabase（异步，不阻塞）
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+    if (cid && uid) {
+      supabase
+        .from('checkins')
+        .insert({ couple_id: cid, user_id: uid, check_date: d })
+        .then(({ error }) => {
+          if (error) console.error('[Interact] Supabase checkin sync failed:', error.message);
+        });
+
+      // 加积分
+      import('@/modules/points/store').then(({ usePointsStore }) => {
+        usePointsStore().earnPoints(uid, 'checkin');
+      });
+    }
+
+    return { success: true };
   }
 
   // === 互动动态 ===

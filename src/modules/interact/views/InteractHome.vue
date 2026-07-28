@@ -36,13 +36,17 @@ function onStickerClick(sticker: Sticker) {
   }, 1000);
 }
 
-function onCheckIn() {
+async function onCheckIn() {
   if (store.checkedInToday) {
     showToast('今天已经签到过了～');
     return;
   }
-  store.doCheckIn();
-  showToast({ message: '签到成功！今天也想你 💕', icon: 'success' });
+  const result = await store.doCheckIn();
+  if (result.success) {
+    showToast({ message: '签到成功！今天也想你 💕', icon: 'success' });
+  } else {
+    showToast(result.reason || '签到失败');
+  }
 }
 
 function formatTime(ts: number): string {

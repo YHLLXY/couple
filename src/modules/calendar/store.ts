@@ -68,7 +68,8 @@ export const useCalendarStore = defineStore('calendar', () => {
     return diaryDateCache.has(dateStr);
   }
 
-  // === 签到日期缓存（从 Supabase 加载） ===
+  // === 签到日期缓存（本地优先，Supabase 补充） ===
+  const CHECKIN_CACHE_KEY = 'sweetbean_checkins';
   const checkinDateSet = ref<Set<string>>(new Set());
   let checkinsLoaded = false;
 
@@ -76,25 +77,36 @@ export const useCalendarStore = defineStore('calendar', () => {
     checkinDateSet.value = dates;
   }
 
-  /** 从 Supabase 加载签到日期 */
+  /** 加载签到日期：始终读本地，已绑定时合并 Supabase 数据 */
   async function loadCheckinDates(): Promise<void> {
     if (checkinsLoaded) return;
+
+    // 先从 localStorage 加载
+    try {
+      const raw = localStorage.getItem(CHECKIN_CACHE_KEY);
+      if (raw) {
+        const arr: string[] = JSON.parse(raw);
+        checkinDateSet.value = new Set(arr);
+      }
+    } catch { /* 静默跳过 */ }
+
+    // 如果已绑定，合并 Supabase 数据
     const cid = useUserStore().coupleId;
     const uid = currentUserId();
-    if (!cid || !uid) return;
-    const { data } = await supabase
-      .from('checkins')
-      .select('check_date')
-      .eq('couple_id', cid)
-      .eq('user_id', uid);
-    if (data) {
-      const dates = new Set<string>();
-      for (const row of data) {
-        dates.add((row as Record<string, unknown>).check_date as string);
+    if (cid && uid) {
+      const { data } = await supabase
+        .from('checkins')
+        .select('check_date')
+        .eq('couple_id', cid)
+        .eq('user_id', uid);
+      if (data) {
+        for (const row of data) {
+          checkinDateSet.value.add((row as Record<string, unknown>).check_date as string);
+        }
       }
-      checkinDateSet.value = dates;
-      checkinsLoaded = true;
     }
+
+    checkinsLoaded = true;
   }
 
   // 获取某天的标记
