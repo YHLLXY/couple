@@ -1,21 +1,52 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useRegisterSW } from 'virtual:pwa-register/vue';
 
 const { needRefresh, updateServiceWorker } = useRegisterSW();
 
+interface ChangelogItem {
+  type: 'feat' | 'fix';
+  text: string;
+}
+
+interface Changelog {
+  version: string;
+  date: string;
+  changes: ChangelogItem[];
+}
+
 const visible = ref(false);
 const updating = ref(false);
+const changelog = ref<Changelog | null>(null);
+
+const typeLabel: Record<string, string> = {
+  feat: '🆕',
+  fix: '🔧',
+};
 
 // 检测到更新时显示弹窗
-import { watch } from 'vue';
 watch(needRefresh, (val) => {
-  if (val) visible.value = true;
+  if (val) {
+    visible.value = true;
+    loadChangelog();
+  }
 });
+
+/** 加载 changelog（不会被 SW 缓存，始终拿到服务端最新版本） */
+async function loadChangelog() {
+  try {
+    const res = await fetch('/changelog.json', { cache: 'no-cache' });
+    if (res.ok) {
+      changelog.value = await res.json();
+    }
+  } catch {
+    // 加载失败静默跳过，弹窗仍然可用
+  }
+}
 
 async function handleUpdate() {
   updating.value = true;
-  await updateServiceWorker(true); // true = 刷新页面
+  await updateServiceWorker(true);
 }
 
 function handleDismiss() {
@@ -41,7 +72,22 @@ function handleDismiss() {
 
           <!-- 标题 -->
           <h2 class="update-card__title">小甜豆更新啦</h2>
-          <p class="update-card__desc">有新版本可用，更新后就能看到最新内容～</p>
+          <p class="update-card__sub">
+            {{ changelog ? `${changelog.date} · ${changelog.version}` : '有新版本可用' }}
+          </p>
+
+          <!-- 变更日志 -->
+          <div v-if="changelog" class="update-card__changelog">
+            <div
+              v-for="(item, i) in changelog.changes"
+              :key="i"
+              class="changelog-item"
+            >
+              <span class="changelog-item__icon">{{ typeLabel[item.type] || '•' }}</span>
+              <span class="changelog-item__text">{{ item.text }}</span>
+            </div>
+          </div>
+          <p v-else class="update-card__desc">更新后就能看到最新内容～</p>
 
           <!-- 按钮 -->
           <button
@@ -83,13 +129,16 @@ function handleDismiss() {
 .update-card {
   position: relative;
   width: 100%;
-  max-width: 320px;
+  max-width: 340px;
+  max-height: 80vh;
   background: #fff;
   border-radius: 24px;
-  padding: 36px 28px 28px;
+  padding: 32px 24px 24px;
   text-align: center;
   box-shadow: 0 20px 60px rgba(255, 122, 149, 0.3), 0 8px 24px rgba(0, 0, 0, 0.08);
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 顶部装饰条 */
@@ -101,6 +150,7 @@ function handleDismiss() {
   right: 0;
   height: 4px;
   background: linear-gradient(90deg, #FF7A95, #FFB8C9, #FF7A95);
+  flex-shrink: 0;
 }
 
 /* 装饰豆子 */
@@ -127,42 +177,86 @@ function handleDismiss() {
 
 /* 图标 */
 .update-card__icon {
-  margin-bottom: 12px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
 }
 .icon-sparkle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
-  font-size: 32px;
+  font-size: 28px;
   background: linear-gradient(135deg, #FFF0F3, #FFE0E6);
   box-shadow: 0 4px 16px rgba(255, 122, 149, 0.25);
 }
 
 /* 标题 */
 .update-card__title {
-  font-size: 22px;
+  font-size: 20px;
   font-weight: 800;
   color: #333;
-  margin-bottom: 8px;
+  margin-bottom: 2px;
   letter-spacing: 0.5px;
+  flex-shrink: 0;
 }
 
-/* 描述 */
+.update-card__sub {
+  font-size: 12px;
+  color: #bbb;
+  margin-bottom: 16px;
+  flex-shrink: 0;
+}
+
+/* 描述（无 changelog 时） */
 .update-card__desc {
   font-size: 14px;
   color: #999;
   line-height: 1.5;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   padding: 0 8px;
+  flex-shrink: 0;
+}
+
+/* 变更日志 */
+.update-card__changelog {
+  flex: 1;
+  overflow-y: auto;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  background: #FFFAFB;
+  border-radius: 14px;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 200px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.changelog-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.changelog-item__icon {
+  flex-shrink: 0;
+  font-size: 14px;
+  margin-top: 1px;
+}
+
+.changelog-item__text {
+  color: #555;
 }
 
 /* 主按钮 */
 .update-card__btn {
   width: 100%;
-  padding: 14px;
+  padding: 13px;
   border: none;
   border-radius: 50px;
   font-size: 16px;
@@ -176,6 +270,7 @@ function handleDismiss() {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .update-card__btn:active {
@@ -188,7 +283,6 @@ function handleDismiss() {
   cursor: default;
 }
 
-/* 加载旋转 */
 .btn-loading-spinner {
   width: 18px;
   height: 18px;
@@ -204,7 +298,7 @@ function handleDismiss() {
 
 /* 稍后 */
 .update-card__later {
-  margin-top: 12px;
+  margin-top: 10px;
   background: none;
   border: none;
   font-size: 13px;
@@ -212,6 +306,7 @@ function handleDismiss() {
   cursor: pointer;
   padding: 8px;
   transition: color 0.2s;
+  flex-shrink: 0;
 }
 .update-card__later:hover {
   color: #999;
