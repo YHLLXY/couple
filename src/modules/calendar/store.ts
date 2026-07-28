@@ -68,11 +68,33 @@ export const useCalendarStore = defineStore('calendar', () => {
     return diaryDateCache.has(dateStr);
   }
 
-  // === 签到日期缓存（由外部模块注入） ===
+  // === 签到日期缓存（从 Supabase 加载） ===
   const checkinDateSet = ref<Set<string>>(new Set());
+  let checkinsLoaded = false;
 
   function setCheckinDates(dates: Set<string>) {
     checkinDateSet.value = dates;
+  }
+
+  /** 从 Supabase 加载签到日期 */
+  async function loadCheckinDates(): Promise<void> {
+    if (checkinsLoaded) return;
+    const cid = useUserStore().coupleId;
+    const uid = currentUserId();
+    if (!cid || !uid) return;
+    const { data } = await supabase
+      .from('checkins')
+      .select('check_date')
+      .eq('couple_id', cid)
+      .eq('user_id', uid);
+    if (data) {
+      const dates = new Set<string>();
+      for (const row of data) {
+        dates.add((row as Record<string, unknown>).check_date as string);
+      }
+      checkinDateSet.value = dates;
+      checkinsLoaded = true;
+    }
   }
 
   // 获取某天的标记
@@ -164,5 +186,6 @@ export const useCalendarStore = defineStore('calendar', () => {
     removeAnniversary,
     refreshDiaryCache,
     setCheckinDates,
+    loadCheckinDates,
   };
 });

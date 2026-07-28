@@ -2,12 +2,20 @@
 import { ref, onMounted } from 'vue';
 import { showToast } from 'vant';
 import { useInteractStore } from '../store';
+import { useUserStore } from '@/modules/user/store';
 import type { Sticker } from '../types';
 
 const store = useInteractStore();
+const userStore = useUserStore();
 
-onMounted(() => {
-  store.loadCheckins();
+onMounted(async () => {
+  // 确保用户数据已加载
+  if (!userStore.isLoggedIn) {
+    await userStore.initAuth();
+  }
+  // 加载签到数据 + 从 Supabase 恢复互动动态
+  await store.loadCheckins();
+  await store.loadActivities();
 });
 
 // 贴纸飘浮动效

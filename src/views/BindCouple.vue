@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useUserStore } from '@/modules/user/store';
 import { showToast, showDialog } from 'vant';
@@ -12,14 +12,25 @@ const loading = ref(false);
 
 const displayCode = computed(() => userStore.inviteCode);
 
+onMounted(async () => {
+  // 确保已登录，未登录则引导去登录页
+  if (!userStore.isLoggedIn) {
+    const ok = await userStore.initAuth();
+    if (!ok) {
+      showToast('请先登录');
+      router.replace('/login');
+    }
+  }
+});
+
 async function handleCreate() {
   loading.value = true;
-  const code = await userStore.generateInviteCode();
+  const { code, error } = await userStore.generateInviteCode();
   loading.value = false;
   if (code) {
     mode.value = 'create';
   } else {
-    showToast('生成失败，请重试');
+    showToast(error || '生成失败，请重试');
   }
 }
 

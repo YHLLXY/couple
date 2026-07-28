@@ -13,4 +13,10 @@ export const userRoutes: RouteRecordRaw[] = [
     component: () => import('./views/UserHome.vue'),  // placeholder — will be replaced in Phase 2
     meta: { title: '情侣绑定', module: 'user', showBack: true },
   },
+  {
+    path: '/about',
+    name: 'about',
+    component: () => import('./views/About.vue'),
+    meta: { title: '关于小甜豆', showBack: true },
+  },
 ];

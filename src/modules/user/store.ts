@@ -47,8 +47,9 @@ export const useUserStore = defineStore('user', () => {
     inviteCode.value = '';
   }
 
-  /** 初始化——检查是否已有 session */
+  /** 初始化——检查是否已有 session（已登录则跳过，避免重复请求） */
   async function initAuth(): Promise<boolean> {
+    if (isLoggedIn.value && coupleId.value !== undefined) return true;
     loading.value = true;
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
@@ -139,9 +140,12 @@ export const useUserStore = defineStore('user', () => {
   }
 
   /** 生成绑定码（自己是先注册的一方） */
-  async function generateInviteCode(): Promise<string> {
+  async function generateInviteCode(): Promise<{ code: string; error?: string }> {
     const { data: { session } } = await supabase.auth.getSession();
-    if (!session?.user) return '';
+    if (!session?.user) return { code: '', error: '请先登录后再生成邀请码' };
+
+    // 如果已经绑定了，直接返回已有邀请码
+    if (inviteCode.value) return { code: inviteCode.value };
 
     // 创建 couple
     const code = genCode();
@@ -153,7 +157,7 @@ export const useUserStore = defineStore('user', () => {
 
     if (error || !coupleRow) {
       console.error('[User] Failed to create couple:', error?.message);
-      return '';
+      return { code: '', error: '创建失败，请检查网络后重试' };
     }
 
     // 更新当前用户的 couple_id
@@ -169,7 +173,7 @@ export const useUserStore = defineStore('user', () => {
       currentUser.value.coupleId = coupleRow.id as string;
     }
 
-    return code;
+    return { code };
   }
 
   /** 通过绑定码加入（自己是后注册的一方） */

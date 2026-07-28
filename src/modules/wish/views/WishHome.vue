@@ -55,7 +55,11 @@ function onRefresh() {
   setTimeout(() => { refreshing.value = false; }, 600);
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 确保用户数据已加载
+  if (!userStore.isLoggedIn) {
+    await userStore.initAuth();
+  }
   // Supabase 数据加载 + Realtime 订阅
   if (!wishStore.loaded) {
     wishStore.loadWishes();
@@ -95,7 +99,16 @@ onMounted(() => {
       </div>
 
       <div v-else class="empty-wrap">
+        <!-- 未绑定提示 -->
+        <div v-if="userStore.isLoggedIn && !userStore.isBound" class="bind-hint">
+          <p class="bind-hint__icon">💑</p>
+          <p class="bind-hint__title">需要先绑定另一半</p>
+          <p class="bind-hint__desc">绑定后你们就可以互相发送心愿啦</p>
+          <van-button type="primary" round size="small" to="/bind-couple">去绑定 💕</van-button>
+        </div>
+        <!-- 已绑定但没数据 -->
         <EmptyState
+          v-else
           icon="💝"
           title="还没有心愿"
           description="点击右下角按钮，告诉TA你想要什么"
@@ -168,4 +181,16 @@ onMounted(() => {
 .empty-wrap {
   padding-top: 80px;
 }
+
+.bind-hint {
+  text-align: center;
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-sm);
+}
+.bind-hint__icon { font-size: 48px; }
+.bind-hint__title { font-size: var(--font-size-md); font-weight: var(--font-weight-bold); color: var(--color-text-primary); }
+.bind-hint__desc { font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--space-sm); }
 </style>

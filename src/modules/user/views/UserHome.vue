@@ -72,7 +72,7 @@ function handleProfileClick() {
       <van-cell title="🎨 主题切换" is-link to="/settings" />
       <van-cell title="🪙 积分中心" is-link to="/points" />
       <van-cell title="📔 共同日记" is-link to="/diary" />
-      <van-cell title="📋 关于小甜豆" is-link />
+      <van-cell title="📋 关于小甜豆" is-link to="/about" />
     </div>
   </div>
 </template>

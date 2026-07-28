@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useCalendarStore } from '../store';
+import { useUserStore } from '@/modules/user/store';
 
 const store = useCalendarStore();
+const userStore = useUserStore();
+
+onMounted(async () => {
+  // 确保用户数据已加载
+  if (!userStore.isLoggedIn) {
+    await userStore.initAuth();
+  }
+  // 加载签到数据（日历小绿点）
+  await store.loadCheckinDates();
+});
 
 const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
 const grid = computed(() => store.getMonthGrid());

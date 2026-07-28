@@ -101,6 +101,14 @@ export const useInteractStore = defineStore('interact', () => {
     checkInDates.value.push(d);
     addActivity('checkin', '今天也想你 💕');
 
+    // 同步到日历 store（让日历小绿点实时更新）
+    import('@/modules/calendar/store').then(({ useCalendarStore }) => {
+      const calStore = useCalendarStore();
+      const updated = new Set(calStore.checkinDateSet);
+      updated.add(d);
+      calStore.setCheckinDates(updated);
+    });
+
     // 加积分
     import('@/modules/points/store').then(({ usePointsStore }) => {
       usePointsStore().earnPoints(uid, 'checkin');
@@ -108,7 +116,27 @@ export const useInteractStore = defineStore('interact', () => {
   }
 
   // === 互动动态 ===
-  const activityLog = ref<ActivityItem[]>([]);
+  const ACTIVITY_CACHE_KEY = 'sweetbean_activity_log';
+  const activityLog = ref<ActivityItem[]>(loadCachedActivities());
+
+  /** 从 localStorage 恢复缓存的活动 */
+  function loadCachedActivities(): ActivityItem[] {
+    try {
+      const raw = localStorage.getItem(ACTIVITY_CACHE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /** 持久化活动到 localStorage */
+  function persistActivities(): void {
+    try {
+      localStorage.setItem(ACTIVITY_CACHE_KEY, JSON.stringify(activityLog.value));
+    } catch {
+      // localStorage 满了就静默跳过
+    }
+  }
 
   function addActivity(type: 'checkin' | 'sticker', content: string, emoji?: string) {
     activityLog.value.unshift({
@@ -122,6 +150,73 @@ export const useInteractStore = defineStore('interact', () => {
     if (activityLog.value.length > 50) {
       activityLog.value = activityLog.value.slice(0, 50);
     }
+    persistActivities();
+  }
+
+  /** 从 Supabase 恢复签到和贴纸活动（补充 localStorage 中没有的数据） */
+  async function loadActivities(): Promise<void> {
+    const cid = currentCoupleId();
+    const uid = currentUserId();
+    if (!cid || !uid) return;
+
+    // 从 Supabase 加载签到记录，重建活动
+    const { data: checkins } = await supabase
+      .from('checkins')
+      .select('check_date, created_at')
+      .eq('couple_id', cid)
+      .eq('user_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (checkins) {
+      const existingIds = new Set(activityLog.value.map(a => a.id));
+      for (const row of checkins) {
+        const r = row as Record<string, unknown>;
+        const dateStr = r.check_date as string;
+        const actId = `checkin_${dateStr}`;
+        if (!existingIds.has(actId)) {
+          activityLog.value.push({
+            id: actId,
+            type: 'checkin',
+            content: '今天也想你 💕',
+            createdAt: new Date(r.created_at as string).getTime(),
+          });
+        }
+      }
+    }
+
+    // 从 Supabase 加载贴纸记录
+    const { data: stickers } = await supabase
+      .from('stickers')
+      .select('emoji, label, created_at')
+      .eq('couple_id', cid)
+      .eq('sender_id', uid)
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    if (stickers) {
+      const existingIds = new Set(activityLog.value.map(a => a.id));
+      for (const row of stickers) {
+        const r = row as Record<string, unknown>;
+        const actId = `sticker_${r.created_at}`;
+        if (!existingIds.has(actId)) {
+          activityLog.value.push({
+            id: actId,
+            type: 'sticker',
+            content: `发送了「${r.label}」`,
+            emoji: r.emoji as string,
+            createdAt: new Date(r.created_at as string).getTime(),
+          });
+        }
+      }
+    }
+
+    // 按时间倒序排列
+    activityLog.value.sort((a, b) => b.createdAt - a.createdAt);
+    if (activityLog.value.length > 50) {
+      activityLog.value = activityLog.value.slice(0, 50);
+    }
+    persistActivities();
   }
 
   async function addSticker(sticker: Sticker) {
@@ -170,6 +265,7 @@ export const useInteractStore = defineStore('interact', () => {
     loadCheckins,
     doCheckIn,
     activityLog,
+    loadActivities,
     addSticker,
   };
 });
