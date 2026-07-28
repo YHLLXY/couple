@@ -11,6 +11,7 @@ declare module 'vue' {
     HeartButton: typeof import('./src/components/HeartButton.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
+    UpdatePrompt: typeof import('./src/components/UpdatePrompt.vue')['default']
     VanActionSheet: typeof import('vant/es')['ActionSheet']
     VanButton: typeof import('vant/es')['Button']
     VanCell: typeof import('vant/es')['Cell']

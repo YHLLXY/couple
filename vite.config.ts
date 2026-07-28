@@ -20,7 +20,7 @@ export default defineConfig({
       targets: ['defaults', 'Android >= 5', 'iOS >= 12'],
     }),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png}'],
       },
